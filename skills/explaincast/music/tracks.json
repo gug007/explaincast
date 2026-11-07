@@ -1,0 +1,6 @@
+{
+  "license": "Mixkit Stock Music Free License (https://mixkit.co/license/#musicFree): free for commercial use in videos, including YouTube, no attribution required. The file itself may not be redistributed (Mixkit User Terms 9.4), so it is not in git: scripts/lib/preflight.js downloads it into this folder.",
+  "tracks": {
+    "bed.mp3": { "title": "Vastness", "artist": "Andrew Ev", "url": "https://assets.mixkit.co/music/184/184.mp3" }
+  }
+}

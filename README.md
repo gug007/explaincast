@@ -1,0 +1,73 @@
+# explaincast
+
+Give Claude Code a title and get a narrated explainer video back: an AI voice, clicks that land on the spoken words, zooms, captions and chapters.
+
+It records a website or web app, or an idea drawn as an HTML page. It can also record a desktop app, which is experimental for now.
+
+[![A 1:20 walkthrough made with explaincast](docs/demo.jpg)](https://github.com/gug007/explaincast/releases/download/v0.1.0/demo.mp4)
+
+*Made with explaincast: starting and stopping a project in [lpm](https://lpm.cx). Click the image to open the video.*
+
+## Install
+
+In Claude Code:
+
+```
+/plugin marketplace add gug007/explaincast
+/plugin install explaincast@explaincast
+```
+
+You also need:
+
+| Requirement | How to get it |
+| --- | --- |
+| macOS | Capture and the checks use its screen and text recognition APIs |
+| Node.js | Tested on 24 |
+| ffmpeg | `brew install ffmpeg` |
+| Xcode Command Line Tools | `xcode-select --install` |
+| Playwright | `npm install -g @playwright/cli` (tested on 0.1.17). Its Chromium downloads on the first run |
+| An OpenAI API key, for the voice | `security add-generic-password -s explaincast -a openai -U -w` (it asks for the key), or set `OPENAI_API_KEY` |
+
+Every run checks the machine first and tells you what is missing.
+
+## Use
+
+```
+/explaincast How checkout works
+```
+
+Say what to explain. Claude picks how to record it, writes the script, proves every click in a free dry run, records the take and reviews it. Each video gets a folder in `~/Movies/explaincast/` (set `EXPLAINCAST_DIR` to move it), holding the MP4 and its `.srt` captions. Captions are not burned in.
+
+| You want a video of | Flag | What happens |
+| --- | --- | --- |
+| A website or web app | `--url <url>` | Runs headless, so you can keep using your Mac |
+| An idea, architecture or process | `--file <page.html>` | Claude draws a page and drives it, also headless |
+| A desktop app, terminal or editor | `--app "<name>"` | Experimental. Takes over your real pointer and keyboard, so leave the Mac alone. Needs `brew install cliclick` and Screen Recording and Accessibility permissions |
+
+To choose for yourself, add a flag from these tables, as in `/explaincast How checkout works --url http://localhost:3000 --for client`. If another skill is also called `explaincast`, use the full name, `/explaincast:explaincast`.
+
+Pick who it is for with `--for`:
+
+| `--for` | Title cards | Music | Extras |
+| --- | --- | --- | --- |
+| `public` (default) | Yes | Yes | Chapter list, thumbnail, `youtube.txt` |
+| `client` | Yes | No | Chapter list |
+| `me` | No | No | Tighter pacing |
+
+## Good to know
+
+- **Your narration goes to OpenAI**, for speech and transcription, on your own key. The recording stays on your Mac. Check before narrating anything confidential.
+- **Nothing is blurred.** The checks flag your own account details, email addresses and any terms you list in `hide`, but they know no other names. For client work, record demo or staging data.
+- **Music:** public videos use "Vastness" by Andrew Ev from [Mixkit](https://mixkit.co/license/#musicFree), free for use in videos. Mixkit's terms forbid redistributing the file, so it isn't in this repo: the first public video downloads it. Set `"music": false` in `video.json` to go without.
+
+## Development
+
+```
+node --test test/*.test.js
+```
+
+Every `video.json` field and beat call is in [reference/beats.md](skills/explaincast/reference/beats.md).
+
+## License
+
+[MIT](LICENSE)

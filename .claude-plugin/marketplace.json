@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "explaincast",
+  "description": "Narrated explainer videos made from anything on screen.",
+  "owner": { "name": "gug007" },
+  "plugins": [
+    {
+      "name": "explaincast",
+      "description": "Makes narrated explainer videos of websites, web apps, ideas drawn as HTML pages, and desktop apps.",
+      "source": "./",
+      "author": { "name": "gug007" },
+      "homepage": "https://github.com/gug007/explaincast",
+      "category": "productivity"
+    }
+  ]
+}

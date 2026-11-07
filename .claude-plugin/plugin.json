@@ -1,0 +1,10 @@
+{
+  "name": "explaincast",
+  "version": "0.1.0",
+  "description": "Makes narrated explainer videos of websites, web apps, ideas drawn as HTML pages, and desktop apps: an AI voice, clicks that land on the spoken words, zooms, captions and chapters.",
+  "author": { "name": "gug007" },
+  "homepage": "https://github.com/gug007/explaincast",
+  "repository": "https://github.com/gug007/explaincast",
+  "license": "MIT",
+  "keywords": ["video", "screencast", "tutorial", "demo", "walkthrough", "narration"]
+}
