@@ -54,7 +54,7 @@ function speaker(pronounce = {}) {
 
 // `tempo` speeds a clip up after it is spoken (pitch kept), before its words
 // are timed, so the onsets match what plays.
-function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronounce }) {
+function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronounce, model = MODEL }) {
   const spoken = speaker(pronounce);
   // The TTS model sometimes swallows a short closing sentence; a clip has to
   // carry every word (in particular the last ones) or it is spoken again.
@@ -65,7 +65,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
     return missed.length > all.length * 0.15 || tailLost ? missed : [];
   }
   fs.mkdirSync(audioDir, { recursive: true });
-  const head = tempo === 1 ? `${MODEL}/${voice}` : `${MODEL}/${voice}@${tempo}`;
+  const head = tempo === 1 ? `${model}/${voice}` : `${model}/${voice}@${tempo}`;
 
   // A clip already spoken for this text stays as it is even after the default
   // style changes: a re-spoken line has a different length and would desync
@@ -99,7 +99,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         voice,
         input: spoken(line.text),
         instructions: style,

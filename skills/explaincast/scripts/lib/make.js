@@ -21,6 +21,7 @@ const { chapters, chaptersText, mmss } = require("./chapters");
 const { runQa } = require("./qa");
 const { planEdit, renderEdit } = require("./edit");
 const { renderCover } = require("./cover");
+const { chooseCover } = require("./coverpick");
 const { audienceOf } = require("./audience");
 const { setHeard } = require("./words");
 
@@ -218,13 +219,46 @@ async function finish(lines, timeline, taken) {
     }
   }
   const opener = (timeline.cards || []).find((c) => c.first && !c.hold);
-  if (video.cover || (audience.thumbnail && opener)) {
-    const thumb = path.join(DIR, "thumbnail.jpg");
-    if (video.cover) await renderCover({ cover: video.cover, raw: P.raw, timeline: taken, frame, file: thumb, captureIn });
-    else await renderThumbnail(opener.title, thumb, OUT);
-    console.log(`thumbnail -> ${thumb}`);
+  const thumbnail = video.cover || (audience.thumbnail && opener) ? await makeThumbnail(path.join(DIR, "thumbnail.jpg"), opener?.title || video.title, taken) : null;
+  runQa({ dir: DIR, mp4: P.mp4, raw: P.raw, timeline, video, privacy: audience.privacy, lines, zooms: taken.zooms, thumbnail });
+}
+
+// thumbnail.jpg: video.json's "cover" as written, "card" for the opening
+// card's words alone, and otherwise those words beside the window at the
+// take's best still (coverpick.js). `taken` is the take's timeline. Returns
+// what it drew, for the report.
+async function makeThumbnail(file, words, taken) {
+  const draw = (cover) => renderCover({ cover, raw: P.raw, timeline: taken, frame, file, captureIn });
+  let made;
+  if (video.cover === "card") {
+    await renderThumbnail(words, file, OUT);
+    made = { file, from: "the opening card (video.json cover)" };
+  } else if (video.cover) {
+    await draw(video.cover);
+    made = { file, from: "video.json cover", cover: video.cover };
+  } else {
+    const zooms = editZooms(taken.zooms || [], video.zooms);
+    let picked = null;
+    try {
+      picked = chooseCover({ raw: P.raw, timeline: taken, video, words, zooms, captureIn });
+    } catch (e) {
+      console.log(`thumbnail: could not look through the take for a still (${e.message})`);
+    }
+    const passedOver = (picked?.ranked || []).filter((m) => m.skip).map((m) => `${m.line} at ${mmss(m.ms)}: ${m.skip}`);
+    if (picked?.cover) {
+      await draw(picked.cover);
+      const { pick } = picked;
+      const where = pick.why === "line end" ? `the end of line "${pick.line}"` : `${pick.why} in line "${pick.line}"`;
+      made = { file, from: "picked from the take", cover: picked.cover, moment: `${where}, ${mmss(pick.ms)} into the take`, ...(passedOver.length && { passedOver }) };
+      console.log(`thumbnail: the window at ${made.moment} (best of ${picked.ranked.length} stills); set video.json "cover" to choose another, as in ${JSON.stringify(picked.cover)}`);
+    } else {
+      await renderThumbnail(words, file, OUT);
+      made = { file, from: "the opening card: no still of the take would do", ...(passedOver.length && { passedOver }) };
+      console.log(`thumbnail: no still of the take would do, so it is the opening card${passedOver.length ? ` (${passedOver.join("; ")})` : ""}`);
+    }
   }
-  runQa({ dir: DIR, mp4: P.mp4, raw: P.raw, timeline, video, privacy: audience.privacy, lines, zooms: taken.zooms });
+  console.log(`thumbnail -> ${file}`);
+  return made;
 }
 
 (async () => {

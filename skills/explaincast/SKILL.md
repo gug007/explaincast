@@ -18,7 +18,7 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 3. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --speak-only`. It voices the lines and prints the video's real length. Every later run reuses each clip whose text is unchanged.
 4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms.
 5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render.
-6. Fix every warning, read `qa/report.json`, and look at `qa/sheet.jpg`, which has a tile for each line, card and zoom. A FAIL means the video isn't ready. A pass covers only what the report lists, so judge the tiles yourself.
+6. Fix every warning, read `qa/report.json`, and look at `qa/sheet.jpg`, which has a tile for each line, card and zoom, and at `thumbnail.jpg`, whose moment the report's `thumbnail` names. A FAIL means the video isn't ready. A pass covers only what the report lists, so judge the tiles yourself.
 7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` beside it, not burned in.
 
 Any change to the narration or the beats needs a new take. `--mux-only` renders the last take again without recording, after changing `music` or a recorded zoom (`zooms`). `--respeak` voices every line again, for a clip that came out wrong.

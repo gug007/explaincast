@@ -15,7 +15,7 @@
 | `voice`, `style` | TTS voice (`marin`) and style prompt |
 | `music` | `true`, `false` or a file, overriding the audience |
 | `zooms` | Changes to recorded zooms, by the id the render log prints, applied with `--mux-only`: `{ "line#1": { scale, at, ms, drop } }` |
-| `cover` | `{ words, line, at, crop, style: "window" \| "closeup" }` or `{ image }`: the thumbnail |
+| `cover` | `{ words, line, at, crop, style: "window" \| "closeup" }` or `{ image }`: the thumbnail. Without one, a public video's thumbnail is the opening card's words beside the window at the take's best still: a settled moment of a main view, full of content, with nothing the checks flag. The render log and `qa/report.json` give it as a `cover` to pin or change. `"card"` keeps the words alone |
 | `speedUpWaits` | `false` keeps waits real time. By default a silence over 2.5 s between lines plays faster under a badge |
 | `youtube` | `{ hook: [], learn: [], tags: [] }` for `youtube.txt` |
 

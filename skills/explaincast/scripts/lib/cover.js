@@ -2,13 +2,17 @@
 // serif, a few big words, and the window at a moment of the take.
 // "window" sets the words left and the window right, running off the edge;
 // "closeup" fills everything under a band of canvas with the crop, big.
-// Without a "cover" the thumbnail stays the opening card (cards.js).
+// Without a "cover", coverpick.js picks the moment and this draws it as a
+// "window" cover; "cover": "card" keeps the opening card alone (cards.js).
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { CANVAS, POOLS, POOLS_AT_REST } = require("./overlay");
 
 const SERIF = `"Iowan Old Style", "Palatino", Georgia, serif`;
+// The tallest the words may set, by style: the window cover's column keeps
+// 128 px clear above and below, the closeup's words stay inside their band.
+const WORDS_MAX_H = { window: 1184, closeup: 340 };
 
 const canvasCss = `
   html, body { margin: 0; width: 2560px; height: 1440px; overflow: hidden; }
@@ -25,7 +29,7 @@ function layout(style, words, img, aspect) {
       body { background: #1b1b1b; }
       .shot { left: 0; top: 536px; width: 2560px; height: 904px; }
       .band { position: absolute; left: 0; top: 0; width: 2560px; height: 500px; overflow: hidden; background: ${CANVAS}; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
-      .words { left: 0; top: 100px; width: 2560px; text-align: center; font-size: 264px; }
+      .words { left: 0; top: 100px; width: 2560px; box-sizing: border-box; padding: 0 128px; text-align: center; font-size: 264px; }
     </style>
     <div class="shot"><img src="${img}"></div>
     <div class="band"><div class="pools"></div></div>
@@ -40,6 +44,16 @@ function layout(style, words, img, aspect) {
   <div class="pools"></div>
   <div class="words">${words}</div>
   <div class="shot"><img src="${img}"></div>`;
+}
+
+// Long words shrink until the widest fits its column and the whole stays
+// within `maxH`; a cover's few words keep their size.
+function fitWords(maxH) {
+  const el = document.querySelector(".words");
+  for (let i = 0; i < 40; i++) {
+    if (el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().height <= maxH) return;
+    el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * 0.95}px`;
+  }
 }
 
 const escape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "’");
@@ -74,6 +88,7 @@ async function renderCover({ cover, raw, timeline, frame, file, captureIn }) {
       const tab = await browser.newPage({ viewport: { width: 2560, height: 1440 }, deviceScaleFactor: 1 });
       await tab.goto(`file://${page}`, { waitUntil: "load" });
       await tab.evaluate(() => document.fonts.ready);
+      await tab.evaluate(fitWords, WORDS_MAX_H[style] || WORDS_MAX_H.window);
       await tab.screenshot({ path: path.join(work, "cover.png") });
     } finally {
       await browser.close();

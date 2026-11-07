@@ -102,3 +102,10 @@ test("a word a beat waits for by itself is checked like any cue", () => {
   const { errors } = checkVideo(video, { async a(s) { await s.at("elsewhere"); } });
   assert.ok(errors.some((e) => /cue "elsewhere" is not in its line/.test(e)));
 });
+
+test('"cover": "card" keeps the opening card; any other string is a mistake', () => {
+  assert.deepStrictEqual(checkVideo({ ...ok, cover: "card" }, okBeats), { errors: [], warnings: [] });
+  const { errors } = checkVideo({ ...ok, cover: "window" }, okBeats);
+  assert.strictEqual(errors.length, 1);
+  assert.match(errors[0], /cover is "card"/);
+});

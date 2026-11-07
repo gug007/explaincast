@@ -114,7 +114,9 @@ function checkVideo(video, beats, { dir = null } = {}) {
 function checkEdit(video, ids, errors, warnings, dir) {
   if (video.speedUpWaits != null && typeof video.speedUpWaits !== "boolean") errors.push('video.json "speedUpWaits" is true or false');
   const cover = video.cover;
-  if (cover?.image) {
+  if (typeof cover === "string") {
+    if (cover !== "card") errors.push(`video.json cover is "card", { "image" } or { "words", "line", ... } (got "${cover}")`);
+  } else if (cover?.image) {
     if (dir && !fs.existsSync(path.resolve(dir, cover.image))) errors.push(`video.json cover: the image "${cover.image}" is not in the video folder`);
   } else if (cover) {
     if (!cover.words) errors.push('video.json cover has no "words" (two to four, bigger than the title card\'s)');

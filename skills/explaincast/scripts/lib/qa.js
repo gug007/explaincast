@@ -56,6 +56,39 @@ function identity() {
   return terms.map((t) => ({ ...t, re: new RegExp(`(?<![a-z0-9])${t.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z0-9])`) }));
 }
 
+// The text macOS reads in each image, by its path.
+function readText(files) {
+  const text = new Map();
+  const bin = helper("ocr");
+  for (let i = 0; i < files.length; i += 40) {
+    const r = run(bin, files.slice(i, i + 40));
+    if (r.status !== 0) throw new Error(`text recognition failed (${r.status ?? r.signal}): ${(r.stderr || "").slice(-200)}`);
+    for (const line of r.stdout.split("\n")) {
+      const [file, ...rest] = line.split("\t");
+      if (!file) continue;
+      text.set(file, `${text.get(file) || ""}\n${rest.join("\t")}`);
+    }
+  }
+  return text;
+}
+
+// What on-screen `text` must not show: the recorder's own details (`terms`,
+// from identity()), video.json "hide" terms, email addresses and error text.
+// `privacy` is the level a privacy hit gets; error text always fails.
+function screenHits(text, terms, hide = [], privacy = "FAIL") {
+  const low = text.toLowerCase();
+  const hits = [];
+  for (const t of terms) if (t.re.test(low)) hits.push({ key: `id:${t.text}`, level: privacy, message: `your ${t.why} ("${t.text}") is on screen` });
+  for (const term of hide) if (low.includes(term.toLowerCase())) hits.push({ key: `hide:${term}`, level: privacy, message: `"${term}" (video.json hide) is on screen` });
+  // The domain ends in letters: "root@dev-server" read beside "Connecting..."
+  // is an ssh target, not an address.
+  for (const m of low.match(/[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/g) || []) {
+    if (!/@example\./.test(m)) hits.push({ key: `mail:${m}`, level: privacy, message: `an email address (${m}) is on screen` });
+  }
+  for (const e of ERROR_TEXT) if (low.includes(e)) hits.push({ key: `err:${e}`, level: "FAIL", message: `error text on screen: "${e}"` });
+  return hits;
+}
+
 // Text on screen per second of the take, reading each distinct frame once.
 function readScreen(raw) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "explaincast-qa-"));
@@ -69,17 +102,7 @@ function readScreen(raw) {
       byHash.get(h).push(f);
     }
     const unique = [...byHash.values()].map((fs2) => path.join(tmp, fs2[0]));
-    const text = new Map();
-    const bin = helper("ocr");
-    for (let i = 0; i < unique.length; i += 40) {
-      const r = run(bin, unique.slice(i, i + 40));
-      if (r.status !== 0) throw new Error(`text recognition failed (${r.status ?? r.signal}): ${(r.stderr || "").slice(-200)}`);
-      for (const line of r.stdout.split("\n")) {
-        const [file, ...rest] = line.split("\t");
-        if (!file) continue;
-        text.set(file, `${text.get(file) || ""}\n${rest.join("\t")}`);
-      }
-    }
+    const text = readText(unique);
     if (unique.length && ![...text.values()].some((t) => t.trim())) throw new Error("text recognition read nothing on any frame");
     const perSecond = [];
     for (const [, group] of byHash) {
@@ -113,15 +136,7 @@ function screenChecks(raw, clock, { hide = [], privacy = "FAIL" }) {
   };
   const terms = identity();
   for (const { s, text } of screen) {
-    const low = text.toLowerCase();
-    for (const t of terms) if (t.re.test(low)) note(`id:${t.text}`, privacy, `your ${t.why} ("${t.text}") is on screen`, s);
-    for (const term of hide) if (low.includes(term.toLowerCase())) note(`hide:${term}`, privacy, `"${term}" (video.json hide) is on screen`, s);
-    // The domain ends in letters: "root@dev-server" read beside "Connecting..."
-    // is an ssh target, not an address.
-    for (const m of low.match(/[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/g) || []) {
-      if (!/@example\./.test(m)) note(`mail:${m}`, privacy, `an email address (${m}) is on screen`, s);
-    }
-    for (const e of ERROR_TEXT) if (low.includes(e)) note(`err:${e}`, "FAIL", `error text on screen: "${e}"`, s);
+    for (const h of screenHits(text, terms, hide, privacy)) note(h.key, h.level, h.message, s);
   }
   for (const h of hits.values()) checks.push({ level: h.level, check: "screen", message: `${h.message} at ${ranges(h.seconds)}${clock}` });
   if (!hits.size) checks.push({ level: "OK", check: "screen", message: `read ${screen.length} s of the take: none of your own details, "hide" terms, email addresses or error text (it knows no other names)` });
@@ -202,7 +217,9 @@ function sheet(mp4, list, file) {
 
 // `raw` is the take's capture; on an edited cut its clock is the take's, not
 // the cut's. `privacy` is how a name on screen counts for this audience.
-function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], zooms, log = console.log }) {
+// `thumbnail` (optional) says which picture became thumbnail.jpg and why, for
+// the report.
+function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], zooms, thumbnail, log = console.log }) {
   const qaDir = path.join(path.dirname(mp4), "qa");
   fs.mkdirSync(qaDir, { recursive: true });
   const checks = [];
@@ -227,6 +244,7 @@ function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], z
     pass: !checks.some((c) => c.level === "FAIL"),
     checks,
     ...(tiles.length && { sheet: sheetFile, tiles }),
+    ...(thumbnail && { thumbnail }),
   };
   fs.writeFileSync(path.join(qaDir, "report.json"), JSON.stringify(report, null, 2));
   const fails = checks.filter((c) => c.level === "FAIL");
@@ -236,4 +254,4 @@ function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], z
   return report;
 }
 
-module.exports = { runQa };
+module.exports = { runQa, identity, readText, screenHits };
