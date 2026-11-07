@@ -10,6 +10,7 @@ const { parseCli, videoDir } = require("./cli");
 const { lintDir } = require("./lint");
 const { helper } = require("./helpers");
 const { audienceOf } = require("./audience");
+const { KEY_STEPS } = require("./voice");
 
 const ROOT = process.env.EXPLAINCAST_DIR || path.join(os.homedir(), "Movies/explaincast");
 let cli;
@@ -79,7 +80,7 @@ async function music() {
 function voice() {
   if (!audio || muxOnly || process.env.OPENAI_API_KEY) return;
   const has = run("security", ["find-generic-password", "-s", "explaincast", "-a", "openai"]).status === 0;
-  if (!has) missing.push("the OpenAI key for the voice: security add-generic-password -s explaincast -a openai -U -w (it asks for the key), or OPENAI_API_KEY");
+  if (!has) missing.push(`an OpenAI API key, for the voice:\n${KEY_STEPS}`);
 }
 
 function script() {

@@ -9,7 +9,7 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/new.js *) Bash(${CLAUDE_SKILL_DI
 
 A video is a folder in `~/Movies/explaincast/<slug>/` (`EXPLAINCAST_DIR` moves it) holding two files you write: `video.json`, the narration, target and audience, and `beats.js`, what happens on each line. Every line is voiced first and the take is recorded to the real clip lengths, so each action lands on its word.
 
-macOS only. `take.sh` checks the machine before every run and names whatever is missing.
+macOS only. `take.sh` checks the machine before every run and names whatever is missing. If the OpenAI key is missing, give the user the steps it prints and wait for them to finish. Never ask for the key in the chat or run the Keychain command for them, since it prompts for the key.
 
 ## Workflow
 

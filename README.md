@@ -26,9 +26,32 @@ You also need:
 | ffmpeg | `brew install ffmpeg` |
 | Xcode Command Line Tools | `xcode-select --install` |
 | Playwright | `npm install -g @playwright/cli` (tested on 0.1.17). Its Chromium downloads on the first run |
-| An OpenAI API key, for the voice | `security add-generic-password -s explaincast -a openai -U -w` (it asks for the key), or set `OPENAI_API_KEY` |
+| An OpenAI API key, for the voice | See [Set up your OpenAI key](#set-up-your-openai-key) below |
 
 Every run checks the machine first and tells you what is missing.
+
+### Set up your OpenAI key
+
+The voice and the word timing come from OpenAI, so explaincast needs your own API key. You do this once.
+
+1. **Get a key.** Sign in at [platform.openai.com/api-keys](https://platform.openai.com/api-keys), click **Create new secret key** and copy it. It starts with `sk-`. The API is billed per use, so the account needs a payment method or credits under [Billing](https://platform.openai.com/settings/organization/billing).
+2. **Save it in your Mac's Keychain.** Open Terminal, run this, paste the key when it asks and press Return. It asks twice, and nothing shows as you paste:
+
+   ```
+   security add-generic-password -s explaincast -a openai -U -w
+   ```
+
+3. **Check it worked.** This prints `saved` without showing the key:
+
+   ```
+   security find-generic-password -s explaincast -a openai >/dev/null && echo saved
+   ```
+
+Run step 2 again to replace the key, or remove it with `security delete-generic-password -s explaincast -a openai`.
+
+If you'd rather use an environment variable, add `export OPENAI_API_KEY=sk-...` to your `~/.zshrc` and open a new terminal. When it is set, it is used instead of the Keychain.
+
+Never paste the key into the Claude Code chat.
 
 ## Use
 

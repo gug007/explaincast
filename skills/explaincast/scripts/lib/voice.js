@@ -9,6 +9,13 @@ const { alignWords } = require("./words");
 const MODEL = "gpt-4o-mini-tts";
 const SILENT_MS = 3000;
 const KEYCHAIN_SERVICE = "explaincast";
+const KEY_STEPS = [
+  "1. Create a key at https://platform.openai.com/api-keys (the account needs billing set up)",
+  "2. In Terminal, run this and paste the key when it asks (twice; nothing shows as you paste):",
+  `     security add-generic-password -s ${KEYCHAIN_SERVICE} -a openai -U -w`,
+  "   Or set OPENAI_API_KEY instead. Never paste the key into the Claude Code chat.",
+  "   Step by step: https://github.com/gug007/explaincast#set-up-your-openai-key",
+].map((l) => `      ${l}`).join("\n");
 
 function apiKey() {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
@@ -17,7 +24,7 @@ function apiKey() {
   } catch {
     // no key under this name
   }
-  throw new Error("no OpenAI key: set OPENAI_API_KEY or `security add-generic-password -s explaincast -a openai -U -w`");
+  throw new Error(`no OpenAI API key found:\n${KEY_STEPS}`);
 }
 
 function durationMs(file) {
@@ -189,4 +196,4 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
   return { prepare };
 }
 
-module.exports = { makeVoice, speaker };
+module.exports = { makeVoice, speaker, KEY_STEPS };
