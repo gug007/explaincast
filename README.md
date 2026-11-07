@@ -8,7 +8,7 @@ Use it for walkthroughs, product demos, tutorials or explaining an idea, without
 
 *How explaincast works, made with explaincast itself. Click the image to watch it on YouTube.*
 
-Another example: [starting and stopping a project in lpm](https://github.com/gug007/explaincast/releases/download/v0.1.0/demo.mp4) (1:20).
+Another example: [lpm in 3 minutes](https://youtu.be/hM9ArXSLITo), a tour of dev servers, Claude Code and Codex in one window.
 
 ## Install
 
