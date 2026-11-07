@@ -9,6 +9,8 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/new.js *) Bash(${CLAUDE_SKILL_DI
 
 A video is a folder in `~/Movies/explaincast/<slug>/` (`EXPLAINCAST_DIR` moves it) holding two files you write: `video.json`, the narration, target and audience, and `beats.js`, what happens on each line. Every line is voiced first and the take is recorded to the real clip lengths, so each action lands on its word.
 
+`${CLAUDE_SKILL_DIR}` below is this skill's folder, the one holding this SKILL.md. If it still reads as a variable, put that folder's absolute path in its place. Run the scripts from the user's project folder, not this one, since `new.js` looks there for `.explaincast.json`.
+
 macOS only. `take.sh` checks the machine before every run and names whatever is missing. If the OpenAI key is missing, give the user the steps it prints and wait for them to finish. Never ask for the key in the chat or run the Keychain command for them, since it prompts for the key.
 
 ## Workflow
@@ -17,7 +19,7 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 2. Learn the subject from its source or by using it, then write `video.json` and `beats.js`. [reference/beats.md](reference/beats.md) has every field and call.
 3. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --speak-only`. It voices the lines and prints the video's real length. Every later run reuses each clip whose text is unchanged.
 4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms.
-5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render.
+5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render. It records in real time and then renders, so give the command a timeout well past the length step 3 printed.
 6. Fix every warning, read `qa/report.json`, and look at `qa/sheet.jpg`, which has a tile for each line, card and zoom, and at `thumbnail.jpg`, whose moment the report's `thumbnail` names. A FAIL means the video isn't ready. A pass covers only what the report lists, so judge the tiles yourself.
 7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` beside it, not burned in.
 

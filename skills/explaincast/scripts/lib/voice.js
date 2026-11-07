@@ -13,7 +13,7 @@ const KEY_STEPS = [
   "1. Create a key at https://platform.openai.com/api-keys (the account needs billing set up)",
   "2. In Terminal, run this and paste the key when it asks (twice; nothing shows as you paste):",
   `     security add-generic-password -s ${KEYCHAIN_SERVICE} -a openai -U -w`,
-  "   Or set OPENAI_API_KEY instead. Never paste the key into the Claude Code chat.",
+  "   Or set OPENAI_API_KEY instead. Never paste the key into your coding agent's chat.",
   "   Step by step: https://github.com/gug007/explaincast#set-up-your-openai-key",
 ].map((l) => `      ${l}`).join("\n");
 

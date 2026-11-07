@@ -1,6 +1,6 @@
 # explaincast
 
-Give Claude Code a title and get a narrated explainer video back: an AI voice, clicks that land on the spoken words, zooms, captions and chapters.
+Give your coding agent a title and get a narrated explainer video back: an AI voice, clicks that land on the spoken words, zooms, captions and chapters.
 
 Use it for walkthroughs, product demos, tutorials or explaining an idea, without recording your screen or your own voice. It records a website or web app, or an idea drawn as an HTML page. It can also record a desktop app, which is experimental for now.
 
@@ -12,12 +12,22 @@ Another example: [lpm in 3 minutes](https://youtu.be/hM9ArXSLITo), a tour of dev
 
 ## Install
 
-In Claude Code:
+explaincast is an [Agent Skill](https://agentskills.io), so it works in Claude Code, Codex, Gemini CLI, Cursor, GitHub Copilot, OpenCode and other agents that read `SKILL.md` skills.
+
+In Claude Code, install it as a plugin:
 
 ```
 /plugin marketplace add gug007/explaincast
 /plugin install explaincast@explaincast
 ```
+
+In any other agent, install it with the [skills CLI](https://github.com/vercel-labs/skills). It finds the agents on your Mac and asks which ones to add it to:
+
+```
+npx skills add gug007/explaincast -g
+```
+
+`-g` installs it for all your projects. Leave it out to install it only in the current project, or add `-a codex` (or `gemini-cli`, `cursor`, `github-copilot`, `opencode`) to choose the agent. To install by hand instead, clone this repo and link `skills/explaincast` into your agent's skills folder, such as `~/.agents/skills/` for Codex or `~/.gemini/skills/` for Gemini CLI.
 
 You also need:
 
@@ -53,25 +63,29 @@ Run step 2 again to replace the key, or remove it with `security delete-generic-
 
 If you'd rather use an environment variable, add `export OPENAI_API_KEY=sk-...` to your `~/.zshrc` and open a new terminal. When it is set, it is used instead of the Keychain.
 
-Never paste the key into the Claude Code chat.
+Never paste the key into your agent's chat.
 
 ## Use
+
+In Claude Code:
 
 ```
 /explaincast How checkout works
 ```
 
-Say what to explain. Claude picks how to record it, writes the script, proves every click in a free dry run, records the take and reviews it. Each video gets a folder in `~/Movies/explaincast/` (set `EXPLAINCAST_DIR` to move it), holding the MP4 and its `.srt` captions. Captions are not burned in.
+In Codex, type `$explaincast How checkout works`. In other agents, ask for it by name: "Use explaincast to make a video of how checkout works."
 
-To change something, ask Claude. It records again and voices only the lines you changed.
+Say what to explain. The agent picks how to record it, writes the script, proves every click in a free dry run, records the take and reviews it. Each video gets a folder in `~/Movies/explaincast/` (set `EXPLAINCAST_DIR` to move it), holding the MP4 and its `.srt` captions. Captions are not burned in.
+
+To change something, ask the agent. It records again and voices only the lines you changed.
 
 | You want a video of | Flag | What happens |
 | --- | --- | --- |
 | A website or web app | `--url <url>` | Runs headless, so you can keep using your Mac |
-| An idea, architecture or process | `--file <page.html>` | Claude draws a page and drives it, also headless |
+| An idea, architecture or process | `--file <page.html>` | The agent draws a page and drives it, also headless |
 | A desktop app, terminal or editor | `--app "<name>"` | Experimental. Takes over your real pointer and keyboard, so leave the Mac alone. Needs `brew install cliclick` and Screen Recording and Accessibility permissions |
 
-To choose for yourself, add a flag from these tables, as in `/explaincast How checkout works --url http://localhost:3000 --for client`. If another skill is also called `explaincast`, use the full name, `/explaincast:explaincast`.
+To choose for yourself, add a flag from these tables, as in `/explaincast How checkout works --url http://localhost:3000 --for client`. In Claude Code, if another skill is also called `explaincast`, use the full name, `/explaincast:explaincast`.
 
 Pick who it is for with `--for`:
 
