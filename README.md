@@ -2,11 +2,13 @@
 
 Give Claude Code a title and get a narrated explainer video back: an AI voice, clicks that land on the spoken words, zooms, captions and chapters.
 
-It records a website or web app, or an idea drawn as an HTML page. It can also record a desktop app, which is experimental for now.
+Use it for walkthroughs, product demos, tutorials or explaining an idea, without recording your screen or your own voice. It records a website or web app, or an idea drawn as an HTML page. It can also record a desktop app, which is experimental for now.
 
-[![A 1:20 walkthrough made with explaincast](docs/demo.jpg)](https://github.com/gug007/explaincast/releases/download/v0.1.0/demo.mp4)
+[![How explaincast works, a 2-minute video made with explaincast](docs/how-it-works.jpg)](https://youtu.be/inHJLU1rwVw)
 
-*Made with explaincast: starting and stopping a project in [lpm](https://lpm.cx). Click the image to open the video.*
+*How explaincast works, made with explaincast itself. Click the image to watch it on YouTube.*
+
+Another example: [starting and stopping a project in lpm](https://github.com/gug007/explaincast/releases/download/v0.1.0/demo.mp4) (1:20).
 
 ## Install
 
@@ -60,6 +62,8 @@ Never paste the key into the Claude Code chat.
 ```
 
 Say what to explain. Claude picks how to record it, writes the script, proves every click in a free dry run, records the take and reviews it. Each video gets a folder in `~/Movies/explaincast/` (set `EXPLAINCAST_DIR` to move it), holding the MP4 and its `.srt` captions. Captions are not burned in.
+
+To change something, ask Claude. It records again and voices only the lines you changed.
 
 | You want a video of | Flag | What happens |
 | --- | --- | --- |
