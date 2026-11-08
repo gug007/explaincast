@@ -71,9 +71,12 @@ class WebStage extends Stage {
   }
 
   // Right after a navigation the new page can be measured before its
-  // stylesheets arrive, in an unstyled layout; wait for it to load first.
+  // stylesheets arrive, in an unstyled layout; wait for those (not for every
+  // image, which a page of thumbnails can take seconds over).
   async locate(sel) {
-    await this.page.waitForLoadState("load", { timeout: 10000 }).catch(() => {});
+    await this.page
+      .waitForFunction(() => [...document.querySelectorAll('link[rel~="stylesheet"]')].every((l) => l.sheet || l.disabled), null, { timeout: 10000 })
+      .catch(() => {});
     const el = this.page.locator(sel).first();
     if (!(await el.isVisible().catch(() => false))) return null;
     const b = await el.boundingBox().catch(() => null);

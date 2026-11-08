@@ -8,9 +8,10 @@ const { openWeb } = require("../skills/explaincast/scripts/lib/webstage");
 function serve() {
   const pages = {
     "/": `<a id="go" href="/b">go</a>`,
-    "/b": `<div id="spacer" style="height:2000px"></div><button id="btn">Theme</button>`,
+    "/b": `<div id="spacer" style="height:2000px"></div><button id="btn">Theme</button><img src="/slow.png">`,
   };
   const server = http.createServer((req, res) => {
+    if (req.url === "/slow.png") return setTimeout(() => res.writeHead(404).end(), 4000);
     if (req.url === "/late.css") return setTimeout(() => res.writeHead(200, { "content-type": "text/css" }).end("#spacer{display:none}"), 800);
     const head = req.url === "/b" ? `<link rel="stylesheet" href="/late.css">` : "";
     res.writeHead(200, { "content-type": "text/html" }).end(`<!doctype html><head>${head}</head><body style="margin:0">${pages[req.url] || ""}</body>`);
@@ -18,15 +19,17 @@ function serve() {
   return new Promise((done) => server.listen(0, "127.0.0.1", () => done(server)));
 }
 
-test("after a navigation, a target is placed by the loaded page, not the unstyled one", async () => {
+test("after a navigation, a target is placed once the stylesheets load, without waiting on images", async () => {
   const server = await serve();
   const url = `http://127.0.0.1:${server.address().port}/`;
   const web = await openWeb({ video: { target: { type: "web", url } }, dir: "/tmp", frame: { width: 800, height: 400 }, log: () => {} });
   try {
     const s = web.stage({ log: () => {} });
     await web.hooks.page.evaluate(() => (location.href = "/b"));
+    const t0 = Date.now();
     await s.waitFor("#btn");
     const r = await s.rectOf("#btn");
+    assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
     assert.ok(r.y < 100, `button placed at y=${r.y}`);
     assert.strictEqual(await web.hooks.page.evaluate(() => scrollY), 0);
   } finally {
