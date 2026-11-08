@@ -123,3 +123,11 @@ test("a Chinese character heard as one that sounds the same aligns by its pinyin
   const many = alignWords("银行的页面", heardZh("银", "航", "呃", "的", "页面"));
   assert.ok(many.times.every((t) => t != null), `unaligned: ${many.times}`);
 });
+
+test("a Chinese line's numbers are written out as they are read", () => {
+  const { zhNumbers } = require("../skills/explaincast/scripts/lib/words");
+  assert.strictEqual(zhNumbers("成功率要保持在99.9%以上"), "成功率要保持在百分之九十九点九以上");
+  assert.strictEqual(zhNumbers("超过500毫秒，最近30天"), "超过五百毫秒，最近三十天");
+  assert.strictEqual(zhNumbers("2026年的第2个版本"), "二零二六年的第二个版本");
+  assert.deepStrictEqual(norm("2026年"), norm("二零二六年"));
+});

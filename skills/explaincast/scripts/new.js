@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me]
-//        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--lang en|zh] [--tts openai|qwen] [--force]
+//        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--lang en|zh] [--tts openai|ming|qwen] [--force]
 // Starts ~/Movies/explaincast/<slug>/ (EXPLAINCAST_DIR) with video.json and
 // beats.js. The nearest .explaincast.json up from the current folder supplies
 // the project's defaults: target, for, brand, hide, pronounce, heard, voice, style, tts, lang.
@@ -10,7 +10,7 @@ const path = require("path");
 const { parseArgs } = require("util");
 const { AUDIENCES } = require("./lib/audience");
 
-const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--lang en|zh] [--tts openai|qwen] [--force]';
+const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--lang en|zh] [--tts openai|ming|qwen] [--force]';
 const DEFAULT_KEYS = ["target", "for", "brand", "hide", "pronounce", "heard", "voice", "style", "tts", "lang"];
 const MAX_SLUG = 60;
 

@@ -11,7 +11,7 @@ const { lintDir } = require("./lint");
 const { helper } = require("./helpers");
 const { audienceOf } = require("./audience");
 const { KEY_STEPS } = require("./voice");
-const { python, SETUP } = require("./qwen");
+const { python, SETUP } = require("./local");
 
 const ROOT = process.env.EXPLAINCAST_DIR || path.join(os.homedir(), "Movies/explaincast");
 let cli;
@@ -87,9 +87,9 @@ function voice() {
       missing.push(`pinyin-pro, for aligning Chinese: npm install --prefix "${path.join(__dirname, "../..")}"`);
     }
   }
-  if (video.tts === "qwen") {
+  if (video.tts === "qwen" || video.tts === "ming") {
     const check = run(python(), ["-c", "import mlx_audio, mlx_whisper"]);
-    if (check.status !== 0) missing.push(`the local voice's Python (${python()}) with mlx-audio and mlx-whisper, for "tts": "qwen":\n${SETUP}`);
+    if (check.status !== 0) missing.push(`the local voice's Python (${python()}) with mlx-audio and mlx-whisper, for "tts": "${video.tts}":\n${SETUP}`);
     return;
   }
   if (process.env.OPENAI_API_KEY) return;

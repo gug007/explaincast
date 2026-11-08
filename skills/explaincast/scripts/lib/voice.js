@@ -1,11 +1,11 @@
-// Narration clips: one speech clip per line (OpenAI, or the local voice in
-// qwen.js with "tts": "qwen"), cached by model, voice, style and text, with Whisper word onsets so a beat can land an action on a
+// Narration clips: one speech clip per line (OpenAI, or a local voice in
+// local.js with "tts": "ming" or "qwen"), cached by model, voice, style and text, with Whisper word onsets so a beat can land an action on a
 // spoken word (and a caption can light the word up).
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { HAN, norm, alignWords } = require("./words");
-const { qwenProvider } = require("./qwen");
+const { localProvider } = require("./local");
 
 const MODEL = "gpt-4o-mini-tts";
 const SILENT_MS = 3000;
@@ -93,7 +93,11 @@ function openaiProvider({ model = MODEL } = {}) {
   };
 }
 
-const PROVIDERS = { openai: openaiProvider, qwen: qwenProvider };
+const PROVIDERS = {
+  openai: openaiProvider,
+  ming: (o) => localProvider({ ...o, engine: "ming" }),
+  qwen: (o) => localProvider({ ...o, engine: "qwen" }),
+};
 
 // video.json "pronounce" swaps a word for how the voice should say it (the
 // captions keep the written one); `*word*` marks a highlight, never read aloud.
@@ -136,7 +140,8 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
 
   // `cachedOnly` (a re-cut) never calls the API: a line whose clip no longer
   // matches its text stops the run, since the new clip changes the timing.
-  async function tts(line, { fresh = false, cachedOnly = false } = {}) {
+  async function tts(line, { attempt = 1, cachedOnly = false } = {}) {
+    const fresh = attempt > 1;
     const wav = path.join(audioDir, `${line.id}.wav`);
     const stamp = path.join(audioDir, `${line.id}.txt`);
     const key = `${head}\n${style}\n${spoken(line.text)}`;
@@ -152,7 +157,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
       throw new Error(`audio ${line.id}: the line has no clip for its current text; a re-cut never speaks (add --speak to speak it and check it still fits the take, or put the old text back)`);
     }
     fs.rmSync(path.join(audioDir, `${line.id}.words.json`), { force: true });
-    const clip = await provider.speak({ text: spoken(line.text), voice, style, label: `tts ${line.id}` });
+    const clip = await provider.speak({ text: spoken(line.text), voice, style, label: `tts ${line.id}`, attempt });
     if (tempo === 1) {
       fs.writeFileSync(wav, clip);
     } else {
@@ -185,7 +190,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
   async function speak(line, cachedOnly) {
     const heard = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const { wav, cached } = await tts(line, { fresh: attempt > 1, cachedOnly });
+      const { wav, cached } = await tts(line, { attempt, cachedOnly });
       const w = await words(line, wav);
       const missed = missingWords(line, w);
       const rate = cached ? null : zhRate(line, wav);

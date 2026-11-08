@@ -137,5 +137,5 @@ test("a Chinese video lints by its own sentences, cues and teasers", () => {
   assert.deepStrictEqual(errors.filter((e) => /cue/.test(e)), ['beat "start": cue "删除" is not in its line ("点击 Start 按钮，两个服务就都起来了。好。")']);
   assert.ok(errors.some((e) => /line "wrap" points at another video \("下一期"\)/.test(e)), errors.join("\n"));
   assert.ok(warnings.some((w) => /line "start" ends on a very short sentence \("好。"\)/.test(w)), warnings.join("\n"));
-  assert.deepStrictEqual(checkVideo({ ...ok, lang: "fr", tts: "say" }, okBeats).errors, ['video.json "tts" is "openai" or "qwen", not "say"', 'video.json "lang" is "en" or "zh", not "fr"']);
+  assert.deepStrictEqual(checkVideo({ ...ok, lang: "fr", tts: "say" }, okBeats).errors, ['video.json "tts" is "openai", "ming" or "qwen", not "say"', 'video.json "lang" is "en" or "zh", not "fr"']);
 });

@@ -35,6 +35,14 @@ function zhInt(d) {
   return s.replace(/^一十/, "十");
 }
 const zhNumber = (m, int, frac) => zhInt(int) + (frac ? `点${zhDigits(frac)}` : "");
+// A Chinese line's numbers as they are read: 99.9% → 百分之九十九点九, 30天 →
+// 三十天, and a year digit by digit (2026年 → 二零二六年). The local voices read
+// digits badly, so they are given these; the alignment reads both alike.
+const zhNumbers = (t) =>
+  t
+    .replace(/(\d{4})(?=年)/g, (m, d) => zhDigits(d))
+    .replace(/(\d+)(?:\.(\d+))?%/g, (m, int, frac) => `百分之${zhNumber(m, int, frac)}`)
+    .replace(/(\d+)(?:\.(\d+))?/g, zhNumber);
 
 // Words as the transcript and the script both reduce to them: lowercase, no
 // punctuation, and numbers spelled out, so "96%" in one and "ninety-six
@@ -43,10 +51,7 @@ const zhNumber = (m, int, frac) => zhInt(int) + (frac ? `点${zhDigits(frac)}` :
 // and English words kept whole.
 const norm = (t, zh = HAN.test(t)) => (zh ? normZh(t) : normEn(t));
 const normZh = (t) =>
-  t
-    .toLowerCase()
-    .replace(/(\d+)(?:\.(\d+))?%/g, (m, int, frac) => `百分之${zhNumber(m, int, frac)}`)
-    .replace(/(\d+)(?:\.(\d+))?/g, zhNumber)
+  zhNumbers(t.toLowerCase())
     .replace(/两/g, "二")
     .replace(/〇/g, "零")
     .replace(/[\u3000-\u303f\uff00-\uffef]/g, " ")
@@ -266,4 +271,4 @@ class Timing {
   }
 }
 
-module.exports = { sleep, HAN, norm, alignWords, onsets, findPhrase, setHeard, Timing };
+module.exports = { sleep, HAN, norm, zhNumbers, alignWords, onsets, findPhrase, setHeard, Timing };

@@ -37,7 +37,7 @@ function checkVideo(video, beats, { dir = null } = {}) {
   const warnings = [];
   if (!video.title) errors.push("video.json has no title");
   checkTarget(video.target, errors, dir);
-  if (video.tts != null && !["openai", "qwen"].includes(video.tts)) errors.push(`video.json "tts" is "openai" or "qwen", not "${video.tts}"`);
+  if (video.tts != null && !["openai", "ming", "qwen"].includes(video.tts)) errors.push(`video.json "tts" is "openai", "ming" or "qwen", not "${video.tts}"`);
   if (video.lang != null && !["en", "zh"].includes(video.lang)) errors.push(`video.json "lang" is "en" or "zh", not "${video.lang}"`);
   let audience;
   try {
