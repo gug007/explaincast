@@ -11,9 +11,14 @@ guard args.count == 3,
     FileHandle.standardError.write("usage: ocrbox <image> <text>\n".data(using: .utf8)!)
     exit(2)
 }
+// EXPLAINCAST_OCR_LANGS ("zh-Hans,en-US"), set by make.js for a Chinese
+// video, picks the languages to read; without it Vision reads English only.
+let languages = (ProcessInfo.processInfo.environment["EXPLAINCAST_OCR_LANGS"] ?? "")
+    .split(separator: ",").map(String.init).filter { !$0.isEmpty }
 let request = VNRecognizeTextRequest()
 request.recognitionLevel = .accurate
 request.usesLanguageCorrection = false
+if !languages.isEmpty { request.recognitionLanguages = languages }
 try VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
 for observation in request.results ?? [] {
     guard let candidate = observation.topCandidates(1).first,

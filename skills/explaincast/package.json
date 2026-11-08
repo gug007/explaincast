@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "explaincast's own dependencies: the pinyin table that aligns a Chinese line to its transcript.",
+  "dependencies": {
+    "pinyin-pro": "3.29.5"
+  }
+}

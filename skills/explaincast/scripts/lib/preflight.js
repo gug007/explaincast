@@ -11,6 +11,7 @@ const { lintDir } = require("./lint");
 const { helper } = require("./helpers");
 const { audienceOf } = require("./audience");
 const { KEY_STEPS } = require("./voice");
+const { python, SETUP } = require("./qwen");
 
 const ROOT = process.env.EXPLAINCAST_DIR || path.join(os.homedir(), "Movies/explaincast");
 let cli;
@@ -78,7 +79,20 @@ async function music() {
 }
 
 function voice() {
-  if (!audio || muxOnly || process.env.OPENAI_API_KEY) return;
+  if (!audio || muxOnly) return;
+  if (video.lang === "zh") {
+    try {
+      require.resolve("pinyin-pro");
+    } catch {
+      missing.push(`pinyin-pro, for aligning Chinese: npm install --prefix "${path.join(__dirname, "../..")}"`);
+    }
+  }
+  if (video.tts === "qwen") {
+    const check = run(python(), ["-c", "import mlx_audio, mlx_whisper"]);
+    if (check.status !== 0) missing.push(`the local voice's Python (${python()}) with mlx-audio and mlx-whisper, for "tts": "qwen":\n${SETUP}`);
+    return;
+  }
+  if (process.env.OPENAI_API_KEY) return;
   const has = run("security", ["find-generic-password", "-s", "explaincast", "-a", "openai"]).status === 0;
   if (!has) missing.push(`an OpenAI API key, for the voice:\n${KEY_STEPS}`);
 }

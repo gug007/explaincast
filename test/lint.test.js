@@ -109,3 +109,33 @@ test('"cover": "card" keeps the opening card; any other string is a mistake', ()
   assert.strictEqual(errors.length, 1);
   assert.match(errors[0], /cover is "card"/);
 });
+
+test("a Chinese video lints by its own sentences, cues and teasers", () => {
+  const video = {
+    ...ok,
+    lang: "zh",
+    tts: "qwen",
+    narration: [
+      { id: "title", text: "这个视频演示怎么新建一个项目。" },
+      { id: "start", text: "点击 Start 按钮，两个服务就都起来了。好。" },
+      { id: "wrap", text: "下一期我们再讲怎么加服务。" },
+      ok.narration[2],
+    ],
+  };
+  const beats = {
+    ...okBeats,
+    async start(s) {
+      await s.click("button", { cue: "Start 按钮" });
+      await s.zoom("nav", { cue: "两个服务" });
+      await s.zoom("nav", { cue: "删除" });
+    },
+    async wrap(s) {
+      await s.hold(0);
+    },
+  };
+  const { errors, warnings } = checkVideo(video, beats);
+  assert.deepStrictEqual(errors.filter((e) => /cue/.test(e)), ['beat "start": cue "删除" is not in its line ("点击 Start 按钮，两个服务就都起来了。好。")']);
+  assert.ok(errors.some((e) => /line "wrap" points at another video \("下一期"\)/.test(e)), errors.join("\n"));
+  assert.ok(warnings.some((w) => /line "start" ends on a very short sentence \("好。"\)/.test(w)), warnings.join("\n"));
+  assert.deepStrictEqual(checkVideo({ ...ok, lang: "fr", tts: "say" }, okBeats).errors, ['video.json "tts" is "openai" or "qwen", not "say"', 'video.json "lang" is "en" or "zh", not "fr"']);
+});

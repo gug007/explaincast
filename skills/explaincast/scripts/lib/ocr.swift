@@ -4,6 +4,10 @@ import AppKit
 import Foundation
 import Vision
 
+// EXPLAINCAST_OCR_LANGS ("zh-Hans,en-US"), set by make.js for a Chinese
+// video, picks the languages to read; without it Vision reads English only.
+let languages = (ProcessInfo.processInfo.environment["EXPLAINCAST_OCR_LANGS"] ?? "")
+    .split(separator: ",").map(String.init).filter { !$0.isEmpty }
 let files = Array(CommandLine.arguments.dropFirst())
 var found = [[String]](repeating: [], count: files.count)
 let lock = NSLock()
@@ -14,6 +18,7 @@ DispatchQueue.concurrentPerform(iterations: files.count) { i in
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = false
+    if !languages.isEmpty { request.recognitionLanguages = languages }
     try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
     let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
     lock.lock()

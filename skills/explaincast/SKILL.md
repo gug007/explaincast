@@ -15,7 +15,7 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 
 ## Workflow
 
-1. Turn the request into a short, clean title. Use the target and audience it names; otherwise pick the target that fits the subject (see Target) and default to `public`, asking only when the subject leaves the target unclear. Then run `${CLAUDE_SKILL_DIR}/scripts/new.js "<title>" <target flag> [--for <audience>] [--brand "<closing card>"] [--card "<short title>"] [--slug <slug>]`. It prints the video's folder.
+1. Turn the request into a short, clean title. Use the target and audience it names; otherwise pick the target that fits the subject (see Target) and default to `public`, asking only when the subject leaves the target unclear. Then run `${CLAUDE_SKILL_DIR}/scripts/new.js "<title>" <target flag> [--for <audience>] [--brand "<closing card>"] [--card "<short title>"] [--slug <slug>] [--lang zh] [--tts qwen]`. It prints the video's folder.
 2. Learn the subject from its source or by using it, then write `video.json` and `beats.js`. [reference/beats.md](reference/beats.md) has every field and call.
 3. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --speak-only`. It voices the lines and prints the video's real length. Every later run reuses each clip whose text is unchanged.
 4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms.
@@ -43,7 +43,13 @@ When a desktop app also has a web build or a demo mode, record that with `--url`
 | `client` | yes | no | chapter list | FAIL |
 | `me` | no | no | tighter pacing | WARN |
 
-A project can set defaults in `.explaincast.json` at its root: `target`, `for`, `brand`, `hide`, `pronounce`, `heard`, `voice`, `style`.
+A project can set defaults in `.explaincast.json` at its root: `target`, `for`, `brand`, `hide`, `pronounce`, `heard`, `voice`, `style`, `tts`, `lang`.
+
+## Chinese and the local voice
+
+A video in Chinese sets `"lang": "zh"` (`--lang zh`): its lines are written in Chinese (English UI names may stay as they are, "打开 Settings 页面"), cues are Chinese words of the line, and the captions, checks and on-screen text recognition follow. Run `npm install` in this skill's folder once, for the pinyin table that aligns Chinese.
+
+`"tts": "qwen"` (`--tts qwen`) voices the lines on this Mac with Qwen3-TTS and times them with Whisper, with no API key and nothing sent out; its voice is `serena` unless `voice` names another. It needs the Python in `~/.explaincast/venv` (or `EXPLAINCAST_PYTHON`) with mlx-audio and mlx-whisper; `take.sh` prints the setup steps when it is missing. A Chinese clip spoken under 3 characters a second is spoken again.
 
 ## Rules
 
@@ -52,5 +58,5 @@ A project can set defaults in `.explaincast.json` at its root: `target`, `for`, 
 - Check every claim the narration makes against the real product. Sample data or a demo build can behave differently.
 - Keep each video standalone: no teasers, and no YAML, config or CLI detail unless that is the topic.
 - The checks flag the user's own details, any email address and `hide` terms, but know no other names, and nothing is blurred. For client work, record demo or staging data and list the client's sensitive terms in `hide`.
-- Narration goes to OpenAI. Check before voicing anything confidential.
+- Narration goes to OpenAI unless `"tts": "qwen"`. Check before voicing anything confidential.
 - `setup` runs off camera. Read credentials from the environment there, never from `video.json` or `beats.js`.

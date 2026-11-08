@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me]
-//        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]
+//        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--lang en|zh] [--tts openai|qwen] [--force]
 // Starts ~/Movies/explaincast/<slug>/ (EXPLAINCAST_DIR) with video.json and
 // beats.js. The nearest .explaincast.json up from the current folder supplies
-// the project's defaults: target, for, brand, hide, pronounce, heard, voice, style.
+// the project's defaults: target, for, brand, hide, pronounce, heard, voice, style, tts, lang.
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { parseArgs } = require("util");
 const { AUDIENCES } = require("./lib/audience");
 
-const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]';
-const DEFAULT_KEYS = ["target", "for", "brand", "hide", "pronounce", "heard", "voice", "style"];
+const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--lang en|zh] [--tts openai|qwen] [--force]';
+const DEFAULT_KEYS = ["target", "for", "brand", "hide", "pronounce", "heard", "voice", "style", "tts", "lang"];
 const MAX_SLUG = 60;
 
 function fail(message) {
@@ -31,14 +31,16 @@ function projectDefaults(from = process.cwd()) {
   }
 }
 
+// A Chinese title's slug is its pinyin: 订单管理 → ding-dan-guan-li.
 function slugOf(title) {
+  if (/\p{Script=Han}/u.test(title)) title = require("pinyin-pro").pinyin(title, { toneType: "none", nonZh: "consecutive" });
   const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-") || "video";
   return slug.length <= MAX_SLUG ? slug : slug.slice(0, Math.max(slug.lastIndexOf("-", MAX_SLUG), 1));
 }
 
 const { values: o, positionals } = parseArgs({
   args: process.argv.slice(2),
-  options: { for: { type: "string" }, url: { type: "string" }, file: { type: "string" }, app: { type: "string" }, slug: { type: "string" }, card: { type: "string" }, brand: { type: "string" }, force: { type: "boolean" } },
+  options: { for: { type: "string" }, url: { type: "string" }, file: { type: "string" }, app: { type: "string" }, slug: { type: "string" }, card: { type: "string" }, brand: { type: "string" }, lang: { type: "string" }, tts: { type: "string" }, force: { type: "boolean" } },
   allowPositionals: true,
 });
 const title = positionals[0];
@@ -56,10 +58,16 @@ if (fs.existsSync(dir) && !o.force) fail(`${dir} exists; pass --force to rewrite
 const { cards } = AUDIENCES[audience];
 const brand = o.brand || defaults.brand;
 const idea = !!target.file;
+const lang = o.lang || defaults.lang;
+const tts = o.tts || defaults.tts;
+const TODO = {
+  en: { title: `${title}. TODO: one sentence on what this video shows.`, idea: "TODO: the first step of the idea.", first: "TODO: the first step, naming the control before the click lands on it.", wrap: "TODO: what the viewer can do now.", hook: ["TODO: what the video shows.", "TODO: who it is for."] },
+  zh: { title: `${title}。TODO：一句话说明这个视频展示什么。`, idea: "TODO：这个想法的第一步。", first: "TODO：第一步，先说出控件的名字，点击再落到它上面。", wrap: "TODO：看完之后观众能做什么。", hook: ["TODO：视频展示什么。", "TODO：适合谁看。"] },
+}[lang === "zh" ? "zh" : "en"];
 const narration = [
-  ...(cards ? [{ id: "title", text: `${title}. TODO: one sentence on what this video shows.` }] : []),
-  { id: "first", text: idea ? "TODO: the first step of the idea." : "TODO: the first step, naming the control before the click lands on it." },
-  ...(cards ? [{ id: "wrap", text: "TODO: what the viewer can do now." }] : []),
+  ...(cards ? [{ id: "title", text: TODO.title }] : []),
+  { id: "first", text: idea ? TODO.idea : TODO.first },
+  ...(cards ? [{ id: "wrap", text: TODO.wrap }] : []),
   ...(cards && brand ? [{ id: "outro", ms: 3200 }] : []),
 ];
 const video = {
@@ -68,8 +76,10 @@ const video = {
   for: audience,
   target,
   ...(brand && { brand }),
+  ...(lang && { lang }),
+  ...(tts && { tts }),
   narration,
-  ...(audience === "public" && { youtube: { hook: ["TODO: what the video shows.", "TODO: who it is for."], learn: ["TODO"], tags: ["TODO"] } }),
+  ...(audience === "public" && { youtube: { hook: TODO.hook, learn: ["TODO"], tags: ["TODO"] } }),
 };
 const beat = (id, body) => `  async ${id}(s) {\n    ${body}\n  },\n`;
 const beats = [

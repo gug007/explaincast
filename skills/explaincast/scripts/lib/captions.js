@@ -5,7 +5,7 @@
 // speech recognition tends to mangle.
 const fs = require("fs");
 const path = require("path");
-const { norm, onsets } = require("./words");
+const { HAN, norm, onsets } = require("./words");
 
 const LINE_CHARS = 42;
 const CUE_CHARS = LINE_CHARS * 2;
@@ -14,6 +14,15 @@ const PAUSE_MS = 650;
 const TAIL_MS = 300;
 const MIN_MS = 700;
 const SHORT_MS = 1500;
+// A Chinese character (or full-width mark) takes two columns, so a line holds
+// 21 of them; lengths here are in columns.
+const WIDE = /[\p{Script=Han}\u3000-\u303f\uff00-\uffef]/u;
+const width = (s) => [...s].reduce((n, c) => n + (WIDE.test(c) ? 2 : 1), 0);
+const SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
+const SENTENCE_END = /[.!?。！？]["')”’」』）]?\s*$/;
+const COMMA_END = /[,;:，；：、]\s*$/;
+// Words are joined by spaces, a Chinese line's as written.
+const sepOf = (line) => (HAN.test(line.text) ? "" : " ");
 
 // The words of one narration line as written, each with its onset (ms into
 // the clip); punctuation-only tokens ride on the word before.
@@ -22,6 +31,20 @@ function wordsOf(line) {
   const at = onsets(text, line.words, line.ms);
   const out = [];
   let k = 0;
+  // A Chinese line's words come from the segmenter and keep the spaces and
+  // marks after them; each takes as many aligned words as it adds to the
+  // line's (99.9 then % adds 百分之).
+  if (HAN.test(text)) {
+    let seen = "";
+    for (const { segment } of SEGMENTER.segment(text)) {
+      const parts = norm(seen + segment, true).length - norm(seen, true).length;
+      seen += segment;
+      if (!parts && out.length) out.at(-1).text += segment;
+      else if (parts || segment.trim()) out.push({ text: segment, ms: at[Math.min(k, at.length - 1)] ?? 0 });
+      k += parts;
+    }
+    return out;
+  }
   for (const raw of text.split(/\s+/).filter(Boolean)) {
     const parts = norm(raw).length;
     if (!parts) {
@@ -44,6 +67,7 @@ const capital = (w) => /^[A-Z]/.test(w);
 // comma when one is near the middle and never inside a name or a label
 // ("Visual Studio", "Set up Single Sign-On").
 function wrap(text) {
+  if (HAN.test(text)) return wrapZh(text);
   if (text.length <= LINE_CHARS) return text;
   const mid = text.length / 2;
   let best = -1;
@@ -63,8 +87,34 @@ function wrap(text) {
   return best < 0 ? text : `${text.slice(0, best)}\n${text.slice(best + 1)}`;
 }
 
+// A Chinese line breaks between the segmenter's words, after a mark when one
+// is near the middle, never before a mark or after an opening one.
+const OPENS = /[(“‘「『（《]$/;
+function wrapZh(text) {
+  if (width(text) <= LINE_CHARS) return text;
+  const segs = [...SEGMENTER.segment(text)];
+  let best = null;
+  let bestCost = Infinity;
+  for (let s = 1; s < segs.length; s++) {
+    const before = text.slice(0, segs[s].index).trimEnd();
+    const after = text.slice(segs[s].index).trimStart();
+    if (!before || !after || (/^\p{P}/u.test(after) && !OPENS.test(after[0])) || OPENS.test(before)) continue;
+    const [wb, wa] = [width(before), width(after)];
+    let cost = Math.abs(wb - wa) / 2;
+    if (Math.max(wb, wa) > LINE_CHARS) cost += 100;
+    if (/[,;:.!?，；：、。！？]$/.test(before)) cost -= 10;
+    // A lone character the segmenter split off mostly belongs to the word
+    // before it (页|面, 三十|天, 订单|的).
+    if (segs[s].segment.length === 1 && HAN.test(segs[s].segment)) cost += 6;
+    if (cost < bestCost) [best, bestCost] = [`${before}\n${after}`, cost];
+  }
+  return best || text;
+}
+
 function lineCues(line, startMs, limitMs) {
   const words = wordsOf(line);
+  const sep = sepOf(line);
+  const text = (g) => g.map((x) => x.text).join(sep).trim();
   if (!words.length) return [];
   const lastWord = (line.words || []).at(-1);
   const spokenEnd = startMs + (lastWord ? lastWord.end * 1000 : line.ms) + TAIL_MS;
@@ -73,12 +123,12 @@ function lineCues(line, startMs, limitMs) {
   for (const w of words) {
     if (cur.length) {
       const prev = cur.at(-1);
-      const text = cur.map((x) => x.text).join(" ");
-      const breakAfter = /[.!?]["')]?$/.test(prev.text) || (/[,;:]$/.test(prev.text) && text.length >= 30);
-      const paused = w.ms - prev.ms > PAUSE_MS && text.length >= 24;
-      const full = text.length + 1 + w.text.length > CUE_CHARS || w.ms - cur[0].ms > CUE_MS;
+      const shown = width(text(cur));
+      const breakAfter = SENTENCE_END.test(prev.text) || (COMMA_END.test(prev.text) && shown >= 30);
+      const paused = w.ms - prev.ms > PAUSE_MS && shown >= 24;
+      const full = width(text([...cur, w])) > CUE_CHARS || w.ms - cur[0].ms > CUE_MS;
       // A full cue splits at its last comma rather than orphaning a tail.
-      const comma = full ? cur.map((x) => /[,;:]$/.test(x.text)).lastIndexOf(true) : -1;
+      const comma = full ? cur.map((x) => COMMA_END.test(x.text)).lastIndexOf(true) : -1;
       if (comma >= 0 && comma < cur.length - 1) {
         groups.push(cur.slice(0, comma + 1));
         cur = cur.slice(comma + 1);
@@ -92,21 +142,18 @@ function lineCues(line, startMs, limitMs) {
   if (cur.length) groups.push(cur);
   // A scrap of a cue ("So,") reads better joined to the words after it.
   for (let i = 0; i + 1 < groups.length; i++) {
-    const a = groups[i].map((x) => x.text).join(" ");
-    const b = groups[i + 1].map((x) => x.text).join(" ");
     const span = groups[i + 1].at(-1).ms - groups[i][0].ms;
-    if (a.length < 12 && a.length + 1 + b.length <= CUE_CHARS && span <= CUE_MS) {
+    if (width(text(groups[i])) < 12 && width(text([...groups[i], ...groups[i + 1]])) <= CUE_CHARS && span <= CUE_MS) {
       groups.splice(i, 2, [...groups[i], ...groups[i + 1]]);
       i--;
     }
   }
   // A cue that would flash by ("so tap it.", "Get it from the App Store.")
   // joins the one before it, or else the one after, when the two still fit.
-  const text = (g) => g.map((x) => x.text).join(" ");
   const shown = (i) => (i + 1 < groups.length ? groups[i + 1][0].ms : lastWord ? lastWord.end * 1000 : line.ms) - groups[i][0].ms;
-  const fits = (a, b) => text(a).length + 1 + text(b).length <= CUE_CHARS && b.at(-1).ms - a[0].ms <= CUE_MS;
+  const fits = (a, b) => width(text([...a, ...b])) <= CUE_CHARS && b.at(-1).ms - a[0].ms <= CUE_MS;
   for (let i = 0; i < groups.length && groups.length > 1; i++) {
-    if (shown(i) >= SHORT_MS && text(groups[i]).length >= 12) continue;
+    if (shown(i) >= SHORT_MS && width(text(groups[i])) >= 12) continue;
     if (i > 0 && fits(groups[i - 1], groups[i])) {
       groups.splice(i - 1, 2, [...groups[i - 1], ...groups[i]]);
       i -= 2;
@@ -118,7 +165,7 @@ function lineCues(line, startMs, limitMs) {
   return groups.map((g, i) => {
     const start = startMs + g[0].ms;
     const end = i + 1 < groups.length ? startMs + groups[i + 1][0].ms : Math.min(spokenEnd, limitMs);
-    return { startMs: Math.round(start), endMs: Math.round(Math.max(end, start + MIN_MS)), text: wrap(g.map((w) => w.text).join(" ")) };
+    return { startMs: Math.round(start), endMs: Math.round(Math.max(end, start + MIN_MS)), text: wrap(text(g)) };
   });
 }
 

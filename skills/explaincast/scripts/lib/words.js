@@ -12,10 +12,48 @@ function spell(n) {
   return [...spell(Math.floor(n / 1000)), "thousand", ...(n % 1000 ? spell(n % 1000) : [])];
 }
 
+const HAN = /\p{Script=Han}/u;
+const ZH_DIGITS = "零一二三四五六七八九";
+const zhDigits = (d) => [...d].map((c) => ZH_DIGITS[c]).join("");
+function zhUnder1e4(n) {
+  let s = "";
+  let gap = false;
+  [...String(n).padStart(4, "0")].forEach((d, i) => {
+    if (d === "0") return (gap = s !== "");
+    s += (gap ? "零" : "") + ZH_DIGITS[d] + ["千", "百", "十", ""][i];
+    gap = false;
+  });
+  return s;
+}
+// 30 → 三十, 105 → 一百零五, 12000 → 一万二千; a long or 0-led run is read digit by digit.
+function zhInt(d) {
+  if (d.length > 8 || (d.length > 1 && d[0] === "0") || d === "0") return zhDigits(d);
+  const n = Number(d);
+  const hi = Math.floor(n / 1e4);
+  const lo = n % 1e4;
+  const s = (hi ? `${zhUnder1e4(hi)}万` : "") + (lo ? (hi && lo < 1000 ? "零" : "") + zhUnder1e4(lo) : "");
+  return s.replace(/^一十/, "十");
+}
+const zhNumber = (m, int, frac) => zhInt(int) + (frac ? `点${zhDigits(frac)}` : "");
+
 // Words as the transcript and the script both reduce to them: lowercase, no
 // punctuation, and numbers spelled out, so "96%" in one and "ninety-six
-// percent" in the other are the same three words.
-const norm = (t) =>
+// percent" in the other are the same three words. Text with Chinese in it
+// (`zh`) is one word per character, its numbers in Chinese (30天 is 三十天)
+// and English words kept whole.
+const norm = (t, zh = HAN.test(t)) => (zh ? normZh(t) : normEn(t));
+const normZh = (t) =>
+  t
+    .toLowerCase()
+    .replace(/(\d+)(?:\.(\d+))?%/g, (m, int, frac) => `百分之${zhNumber(m, int, frac)}`)
+    .replace(/(\d+)(?:\.(\d+))?/g, zhNumber)
+    .replace(/两/g, "二")
+    .replace(/〇/g, "零")
+    .replace(/[\u3000-\u303f\uff00-\uffef]/g, " ")
+    .replace(/[^a-z0-9\s\p{Script=Han}-]/gu, "")
+    .replace(/-/g, " ")
+    .match(/\p{Script=Han}|[a-z0-9]+/gu) || [];
+const normEn = (t) =>
   t
     .toLowerCase()
     .replace(/%/g, " percent")
@@ -30,8 +68,22 @@ const norm = (t) =>
 let HEARD_AS = {};
 const setHeard = (map = {}) => (HEARD_AS = Object.fromEntries(Object.entries(map).map(([k, v]) => [k.toLowerCase(), v.toLowerCase()])));
 const SOUND_ALIKE = [["to", "too", "two"], ["for", "four"]];
+// Whisper writes a Chinese character as another that sounds the same (设 as
+// 社); two characters match when they share a reading, tones aside. The table
+// (pinyin-pro, `npm install` in the skill folder) loads on the first one.
+let pinyin;
+const readings = new Map();
+function readingsOf(c) {
+  if (!readings.has(c)) {
+    pinyin ||= require("pinyin-pro").pinyin;
+    readings.set(c, pinyin(c, { toneType: "none", multiple: true, type: "array" }));
+  }
+  return readings.get(c);
+}
+const soundsAlike = (a, b) => HAN.test(a) && HAN.test(b) && readingsOf(a).some((r) => readingsOf(b).includes(r));
 const same = (heard, word) =>
   heard === word ||
+  soundsAlike(heard, word) ||
   HEARD_AS[heard] === word ||
   SOUND_ALIKE.some((set) => set.includes(heard) && set.includes(word)) ||
   (heard.endsWith("s") && word.endsWith("s") && heard.length > 3 && HEARD_AS[heard.slice(0, -1)] === word.slice(0, -1));
@@ -39,31 +91,69 @@ const same = (heard, word) =>
 // Start time (ms) of each word of `text` in the clip, or null where the
 // transcript has no match for it.
 function alignWords(text, words) {
-  const all = norm(text);
+  const zh = HAN.test(text);
+  const all = norm(text, zh);
+  // In a Chinese line Whisper splits 99.9% as "99." "9" "%" and Settings as
+  // "Set" "ting" "s"; each is read whole.
+  const heardWords = [];
+  for (const w of words || []) {
+    const prev = heardWords.at(-1);
+    const number = /[\d.]$/.test(prev?.word) && /^[\d.%]/.test(w.word.trim());
+    const word = /[a-z]$/i.test(prev?.word) && /^[a-z]/i.test(w.word);
+    if (zh && (number || word)) prev.word += w.word.trim();
+    else heardWords.push({ word: w.word, start: w.start });
+  }
   const spoken = [];
-  for (const w of words || []) for (const n of norm(w.word)) spoken.push({ n, ms: w.start * 1000 });
+  for (const w of heardWords) for (const n of norm(w.word, zh)) spoken.push({ n, ms: w.start * 1000 });
   const times = new Array(all.length).fill(null);
+  // The transcript words each text word took, first and last.
+  const from = [];
+  const to = [];
+  const hit = (i, k, last) => {
+    times[i] = spoken[k].ms;
+    from[i] = k;
+    to[i] = last;
+  };
   let j = 0;
   for (let i = 0; i < all.length; i++) {
     for (let k = j; k < Math.min(spoken.length, j + 4); k++) {
       if (same(spoken[k].n, all[i])) {
-        times[i] = spoken[k].ms;
+        hit(i, k, k);
         j = k + 1;
         break;
       }
       if (i + 1 < all.length && spoken[k].n === all[i] + all[i + 1]) {
-        times[i] = spoken[k].ms;
-        times[i + 1] = spoken[k].ms;
+        hit(i, k, k);
+        hit(i + 1, k, k);
         i += 1;
         j = k + 1;
         break;
       }
       if (k + 1 < spoken.length && spoken[k].n + spoken[k + 1].n === all[i]) {
-        times[i] = spoken[k].ms;
+        hit(i, k, k + 1);
         j = k + 2;
         break;
       }
     }
+  }
+  // What is left of a Chinese word Whisper misheard as a near sound (告警 as
+  // 倒景, where 告 and 倒 share no reading): as many unmatched characters on
+  // both sides between the same two matched ones are the same words, heard
+  // differently.
+  for (let i = 0; i < all.length; ) {
+    if (times[i] != null) {
+      i++;
+      continue;
+    }
+    let e = i;
+    while (e < all.length && times[e] == null) e++;
+    const p = i > 0 ? to[i - 1] : -1;
+    const q = e < all.length ? from[e] : spoken.length;
+    const heard = spoken.slice(p + 1, q);
+    if (heard.length === e - i && heard.every((x) => HAN.test(x.n)) && all.slice(i, e).every((w) => HAN.test(w))) {
+      heard.forEach((x, m) => (times[i + m] = x.ms));
+    }
+    i = e;
   }
   return { all, times };
 }
@@ -109,7 +199,7 @@ class Timing {
   // between its nearest timed neighbours (or the clip's edges).
   cueMs(text) {
     const { all, times } = alignWords(this.line.text, this.line.words);
-    const at = findPhrase(all, norm(text));
+    const at = findPhrase(all, norm(text, HAN.test(this.line.text)));
     if (at < 0) throw new Error(`cue "${text}" is not in line "${this.line.id}"`);
     if (times[at] == null && this.line.words?.length) this.log(`cue "${text}" interpolated (transcript missed it)`);
     return Math.round(onsets(this.line.text, this.line.words, this.line.ms)[at]);
@@ -176,4 +266,4 @@ class Timing {
   }
 }
 
-module.exports = { sleep, norm, alignWords, onsets, findPhrase, setHeard, Timing };
+module.exports = { sleep, HAN, norm, alignWords, onsets, findPhrase, setHeard, Timing };

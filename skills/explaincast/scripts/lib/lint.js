@@ -3,12 +3,13 @@
 // surface minutes into a take.
 const fs = require("fs");
 const path = require("path");
-const { norm, findPhrase } = require("./words");
+const { HAN, norm, findPhrase } = require("./words");
 const { audienceOf } = require("./audience");
 
 const MAX_FRAME = { w: 1200, h: 680 };
 
 const TEASER = /\b(next (video|video|episode)|in the next (one|part)|coming up next|see you (next|in the next)|stay tuned)\b/i;
+const TEASER_ZH = /下一期|下期|下集|下个视频|下一个视频|敬请期待/;
 const CUE = /\b(cue|until)\s*:\s*(["'`])((?:(?!\2)[^\\\n])+)\2/g;
 const CUE_MS = /\b(?:cueMs|at)\(\s*(["'`])((?:(?!\1)[^\\\n])+)\1/g;
 
@@ -20,7 +21,7 @@ function cuesIn(fn) {
   return out.filter((c) => !c.phrase.includes("${")).sort((a, b) => a.at - b.at);
 }
 
-const sentences = (text) => (text.match(/[^.!?]+[.!?]*/g) || []).map((x) => x.trim()).filter(Boolean);
+const sentences = (text) => (text.match(/[^.!?。！？]+[.!?。！？]*/g) || []).map((x) => x.trim()).filter(Boolean);
 
 function checkTarget(t, errors, dir) {
   if (!t || !["web", "window"].includes(t.type)) return errors.push('video.json "target" needs a "type": "web" or "window"');
@@ -36,6 +37,8 @@ function checkVideo(video, beats, { dir = null } = {}) {
   const warnings = [];
   if (!video.title) errors.push("video.json has no title");
   checkTarget(video.target, errors, dir);
+  if (video.tts != null && !["openai", "qwen"].includes(video.tts)) errors.push(`video.json "tts" is "openai" or "qwen", not "${video.tts}"`);
+  if (video.lang != null && !["en", "zh"].includes(video.lang)) errors.push(`video.json "lang" is "en" or "zh", not "${video.lang}"`);
   let audience;
   try {
     audience = audienceOf(video);
@@ -64,7 +67,7 @@ function checkVideo(video, beats, { dir = null } = {}) {
     const all = norm(line.text || "");
     let last = -1;
     for (const { phrase } of cuesIn(beat)) {
-      const want = norm(phrase);
+      const want = norm(phrase, HAN.test(line.text || ""));
       const at = findPhrase(all, want);
       if (!line.text) {
         errors.push(`beat "${line.id}" waits for "${phrase}", but its line is silent`);
@@ -84,7 +87,8 @@ function checkVideo(video, beats, { dir = null } = {}) {
   }
   for (const line of narration) {
     if (!line.text) continue;
-    if (TEASER.test(line.text)) errors.push(`line "${line.id}" points at another video ("${line.text.match(TEASER)[0]}"); each video stands alone`);
+    const teaser = line.text.match(TEASER) || line.text.match(TEASER_ZH);
+    if (teaser) errors.push(`line "${line.id}" points at another video ("${teaser[0]}"); each video stands alone`);
     const parts = sentences(line.text);
     const lastSentence = parts.at(-1) || "";
     if (parts.length > 1 && norm(lastSentence).length <= 2) {

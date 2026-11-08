@@ -36,9 +36,10 @@ try {
   process.exit(2);
 }
 const slug = path.basename(DIR);
-const DEFAULT_VOICE = "marin";
-const DEFAULT_STYLE =
-  "Talk like a real person casually showing a colleague how something works, over their shoulder: relaxed, natural, everyday intonation with small pauses. Not a voiceover artist or announcer, no over-enunciation, moderate pace. Keep every word crisp and easy to catch.";
+const DEFAULT_STYLE = {
+  en: "Talk like a real person casually showing a colleague how something works, over their shoulder: relaxed, natural, everyday intonation with small pauses. Not a voiceover artist or announcer, no over-enunciation, moderate pace. Keep every word crisp and easy to catch.",
+  zh: "像同事在旁边随口演示一样，语气自然放松，语速适中，吐字清楚。",
+};
 const MUSIC_UNDER_VOICE_LU = 14;
 // Every narrator sounds alike: clips evened out, treble shelved to one
 // brightness.
@@ -47,14 +48,17 @@ const VOICE_SHAPE = { level: true, brightness: -16.5 };
 const video = JSON.parse(fs.readFileSync(path.join(DIR, "video.json"), "utf8"));
 const audience = audienceOf(video);
 setHeard(video.heard);
-const VOICE = video.voice || DEFAULT_VOICE;
-const TTS_STYLE = video.style || DEFAULT_STYLE;
+const LANG = video.lang || "en";
+// The native text recognition (qa, a window take's "text=" targets) reads
+// Chinese only when asked; the helpers inherit this.
+if (LANG === "zh") process.env.EXPLAINCAST_OCR_LANGS = "zh-Hans,en-US";
+const TTS_STYLE = video.style || DEFAULT_STYLE[LANG];
 const dry = !!o["no-audio"];
 const muxOnly = !!o["mux-only"];
 const audioDir = path.join(DIR, "audio");
 const wantsMusic = video.music ?? audience.music;
 const music = wantsMusic === false ? null : typeof wantsMusic === "string" ? path.resolve(DIR, wantsMusic) : DEFAULT_BED;
-const voice = makeVoice({ audioDir, voice: VOICE, style: TTS_STYLE, respeak: !!o.respeak, pronounce: video.pronounce });
+const voice = makeVoice({ audioDir, voice: video.voice, style: TTS_STYLE, tts: video.tts, lang: LANG, respeak: !!o.respeak, pronounce: video.pronounce });
 const frame = frameFor(video);
 const captureIn = video.target.type === "web" ? SCREENCAST_IN : CAPTURE_IN;
 // What moves with a take when a newer one replaces it.
@@ -83,7 +87,7 @@ async function record(lines) {
   interrupted();
   timeline.take = take.id;
   fs.writeFileSync(take.timeline, JSON.stringify(timeline, null, 2));
-  console.log(`recorded ${(timeline.totalMs / 1000).toFixed(1)}s (${VOICE})`);
+  console.log(`recorded ${(timeline.totalMs / 1000).toFixed(1)}s (${voice.name})`);
   for (const w of timeline.warnings || []) console.log(`  warning (${w.kind}${w.line ? `, line ${w.line}` : ""}): ${w.message}`);
   if (dry) return finishDryTake(take);
   const archived = promote(DIR, take, MEDIA);
