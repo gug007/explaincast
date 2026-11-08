@@ -34,3 +34,25 @@ test("after a navigation, a target is placed by the loaded page, not the unstyle
     server.close();
   }
 });
+
+test("a Chinese card title keeps punctuation with its word, so none opens a line", async () => {
+  const server = await serve();
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  const web = await openWeb({ video: { target: { type: "web", url } }, dir: "/tmp", frame: { width: 800, height: 400 }, log: () => {} });
+  try {
+    const s = web.stage({ log: () => {} });
+    await s.drawOverlay();
+    const words = (title) =>
+      web.hooks.page.evaluate((t) => {
+        window.__lc.card(t, 100, true);
+        return [...document.querySelectorAll("#explaincast-card span")].map((x) => x.textContent);
+      }, title);
+    assert.deepStrictEqual(await words("Cloud Shelf · 个人内容站"), ["Cloud", "Shelf ·", "个人", "内容", "站"]);
+    const spans = await words("电商大促，「保障」方案");
+    assert.strictEqual(spans.join(""), "电商大促，「保障」方案");
+    assert.ok(!spans.some((w) => /^[，」]/.test(w) || /「$/.test(w)), `spans: ${spans}`);
+  } finally {
+    await web.close();
+    server.close();
+  }
+});

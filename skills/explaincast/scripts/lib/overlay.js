@@ -107,11 +107,22 @@ function installStage({ cursorSvg, hotspot, scale }) {
       const zh = /\p{Script=Han}/u.test(title);
       const segs = !zh ? title.split(/(\s+)/) : title.replace(/\s/g, "").length <= 8 ? [title] : [...new Intl.Segmenter("zh", { granularity: "word" }).segment(title)].map((x) => x.segment);
       // Each word, and whether a space follows it (an English one's always does).
+      // In Chinese, punctuation never opens a line: a closing mark (·，。」)
+      // joins the word before it, an opening one (「（《) the word after.
       const words = [];
+      let opener = "";
       for (const seg of segs) {
+        const last = words.at(-1);
         if (!seg.trim()) {
-          if (words.length) words.at(-1).space = true;
-        } else words.push({ text: seg, space: !zh });
+          if (last) last.space = true;
+        } else if (zh && /^[\p{Ps}\p{Pi}]+$/u.test(seg)) opener += seg;
+        else if (zh && last && /^\p{P}+$/u.test(seg)) {
+          last.text += (last.space ? " " : "") + seg;
+          last.space = false;
+        } else {
+          words.push({ text: opener + seg, space: !zh });
+          opener = "";
+        }
       }
       words.forEach((w, i) => {
         const span = document.createElement("span");
