@@ -27,10 +27,10 @@ async function runBeats(stage, lines, beats, t0, { gapMs = GAP_MS, tailMs = TAIL
     stage.beginLine(line);
     await beat(stage, line);
     if (i === 0 && (await stage.isCovered())) await stage.reveal();
-    await stage.frame(line.id);
     const rest = startMs + line.ms + gapMs - (Date.now() - t0);
     if (rest < -1500) console.log(`  dead air after ${line.id}: ${(-rest / 1000).toFixed(1)} s past its line`);
     if (rest > 0) await stage.hold(rest);
+    await stage.frame(line.id);
     timeline.push({ id: line.id, startMs, ms: line.ms });
   }
   progress.current = null;
@@ -133,4 +133,4 @@ async function renderTimelineCards(timeline, dir) {
   return renderCards(timeline.cards || [], cardsDir, OUT, { layout: APP_LAYOUT });
 }
 
-module.exports = { recordTake, renderTimelineCards, GAP_MS, LEAD_MS, TAIL_MS };
+module.exports = { recordTake, renderTimelineCards, runBeats, GAP_MS, LEAD_MS, TAIL_MS };
