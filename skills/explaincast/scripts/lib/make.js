@@ -201,7 +201,9 @@ async function render(lines) {
 function writeYoutube(list) {
   const y = video.youtube;
   if (!y) return;
-  const text = [video.title, "", ...(y.hook || []), "", ...(y.learn?.length ? ["You'll learn:", ...y.learn.map((l) => `- ${l}`), ""] : []), ...(list.length >= 3 ? ["Chapters:", ...list.map((c) => `${mmss(c.ms)} ${c.name}`), ""] : []), `Tags: ${(y.tags || []).join(", ")}`];
+  const zh = video.lang === "zh";
+  const [learn, chapters, tags] = zh ? ["你会学到：", "章节：", "标签："] : ["You'll learn:", "Chapters:", "Tags: "];
+  const text = [video.title, "", ...(y.hook || []), "", ...(y.learn?.length ? [learn, ...y.learn.map((l) => `- ${l}`), ""] : []), ...(list.length >= 3 ? [chapters, ...list.map((c) => `${mmss(c.ms)} ${c.name}`), ""] : []), `${tags}${(y.tags || []).join(zh ? "、" : ", ")}`];
   fs.writeFileSync(path.join(DIR, "youtube.txt"), `${text.join("\n")}\n`);
 }
 
