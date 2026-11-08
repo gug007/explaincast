@@ -70,7 +70,10 @@ class WebStage extends Stage {
     await this.page.evaluate((n) => (document.getElementById("explaincast-tick").style.background = n % 2 ? "#000" : "#fff"), n);
   }
 
+  // Right after a navigation the new page can be measured before its
+  // stylesheets arrive, in an unstyled layout; wait for it to load first.
   async locate(sel) {
+    await this.page.waitForLoadState("load", { timeout: 10000 }).catch(() => {});
     const el = this.page.locator(sel).first();
     if (!(await el.isVisible().catch(() => false))) return null;
     const b = await el.boundingBox().catch(() => null);
