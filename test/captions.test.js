@@ -73,6 +73,12 @@ test("chapters start at 0:00, come from cards and lines, and flag YouTube's limi
   assert.match(problems[0], /"Too short" lasts 2\.0 s/);
 });
 
+test("a Chinese video's unnamed opening chapter has a Chinese name", () => {
+  const t = { totalMs: 40000, cards: [], lines: [{ id: "a", startMs: 500, ms: 3000 }, { id: "b", startMs: 20000, ms: 3000 }] };
+  const video = { lang: "zh", narration: [{ id: "a", text: "x" }, { id: "b", text: "x", chapter: "看幻灯片" }] };
+  assert.strictEqual(chapters(t, video).list[0].name, "开场");
+});
+
 test("captions never break inside a name or a label, and a short tail joins the cue before", () => {
   assert.strictEqual(wrap("But on cellular, or on another Wi-Fi, the app can't reach it."), "But on cellular, or on another Wi-Fi,\nthe app can't reach it.");
   assert.doesNotMatch(wrap("Now the iPhone. Open the app and tap Set up Built-in Tailscale."), /(the|Set|Built-in)\n/);

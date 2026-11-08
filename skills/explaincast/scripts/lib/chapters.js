@@ -26,7 +26,7 @@ function chapters(timeline, video, spoken = {}) {
     if (!near) merged.push({ ...m });
     else if (m.from === "line") Object.assign(near, { name: m.name, from: "line" });
   }
-  const first = narration[0]?.chapter || "Intro";
+  const first = narration[0]?.chapter || (video.lang === "zh" ? "开场" : "Intro");
   if (!merged.length || merged[0].ms >= SAME_MS) merged.unshift({ ms: 0, name: first, from: "start" });
   else merged[0].ms = 0;
   // The last chapter runs to the start of the silent end card.
