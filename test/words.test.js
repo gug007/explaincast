@@ -82,6 +82,11 @@ test("a Chinese line aligns to Whisper's words, digits and all", () => {
   assert.deepStrictEqual(mixed.times, [0, 0, 500, 1000, 1000]);
 });
 
+test("a Chinese line may open on an English word", () => {
+  const { times } = alignWords("Cloud Shelf 使用导览", heardZh("Cloud", " Shelf", " 使用", "导览"));
+  assert.ok(times.every((t) => t != null), `unaligned: ${times}`);
+});
+
 test("a misheard Chinese word between two heard ones still counts as spoken", () => {
   const { times } = alignWords("告警就会自动触发，值班同学马上收到", heardZh(" 告警", "就会", "自动", "出发", "值班", "同学", "马上", "收到"));
   assert.ok(times.every((t) => t != null), `unaligned: ${times}`);

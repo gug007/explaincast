@@ -105,7 +105,7 @@ function alignWords(text, words) {
     const prev = heardWords.at(-1);
     const number = /[\d.]$/.test(prev?.word) && /^[\d.%]/.test(w.word.trim());
     const word = /[a-z]$/i.test(prev?.word) && /^[a-z]/i.test(w.word);
-    if (zh && (number || word)) prev.word += w.word.trim();
+    if (zh && prev && (number || word)) prev.word += w.word.trim();
     else heardWords.push({ word: w.word, start: w.start });
   }
   const spoken = [];
