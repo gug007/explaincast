@@ -102,13 +102,23 @@ function installStage({ cursorSvg, hotspot, scale }) {
       const perWord = 110;
       const wordMs = 640;
       const inner = document.createElement("div");
-      const words = title.split(/\s+/);
+      // A Chinese title has no spaces: up to 8 characters it is one word (and
+      // shrinks to one line), longer it breaks between the segmenter's words.
+      const zh = /\p{Script=Han}/u.test(title);
+      const segs = !zh ? title.split(/(\s+)/) : title.replace(/\s/g, "").length <= 8 ? [title] : [...new Intl.Segmenter("zh", { granularity: "word" }).segment(title)].map((x) => x.segment);
+      // Each word, and whether a space follows it (an English one's always does).
+      const words = [];
+      for (const seg of segs) {
+        if (!seg.trim()) {
+          if (words.length) words.at(-1).space = true;
+        } else words.push({ text: seg, space: !zh });
+      }
       words.forEach((w, i) => {
         const span = document.createElement("span");
-        span.textContent = w;
-        span.style.cssText = "display:inline-block; opacity:0; will-change:transform,filter,opacity";
+        span.textContent = w.text;
+        span.style.cssText = "display:inline-block; white-space:pre; opacity:0; will-change:transform,filter,opacity";
         inner.append(span);
-        if (i < words.length - 1) inner.append(document.createTextNode(" "));
+        if (i < words.length - 1 && w.space) inner.append(document.createTextNode(" "));
       });
       card.replaceChildren(inner);
       // A long word or title shrinks to its column instead of running under
