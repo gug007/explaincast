@@ -47,11 +47,13 @@ Every run checks the machine first and tells you what is missing.
 The voice and the word timing come from OpenAI, so explaincast needs your own API key. You do this once.
 
 1. **Get a key.** Sign in at [platform.openai.com/api-keys](https://platform.openai.com/api-keys), click **Create new secret key** and copy it. It starts with `sk-`. The API is billed per use, so the account needs a payment method or credits under [Billing](https://platform.openai.com/settings/organization/billing).
-2. **Save it in your Mac's Keychain.** Open Terminal, run this, paste the key when it asks and press Return. It asks twice, and nothing shows as you paste:
+2. **Save it in your Mac's Keychain.** Open Terminal, run this, paste the key when it says `Key:` and press Return. Nothing shows as you paste:
 
    ```
-   security add-generic-password -s explaincast -a openai -U -w
+   printf 'Key: '; read -rs k; echo; security add-generic-password -s explaincast -a openai -U -w "$k"; unset k
    ```
+
+   Don't use `security add-generic-password ... -w` on its own and paste at its prompt: that prompt keeps only the first 128 characters, and OpenAI keys are longer, so the saved key is cut short and OpenAI rejects it.
 
 3. **Check it worked.** This prints `saved` without showing the key:
 

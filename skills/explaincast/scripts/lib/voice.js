@@ -11,8 +11,8 @@ const SILENT_MS = 3000;
 const KEYCHAIN_SERVICE = "explaincast";
 const KEY_STEPS = [
   "1. Create a key at https://platform.openai.com/api-keys (the account needs billing set up)",
-  "2. In Terminal, run this and paste the key when it asks (twice; nothing shows as you paste):",
-  `     security add-generic-password -s ${KEYCHAIN_SERVICE} -a openai -U -w`,
+  "2. In Terminal, run this and paste the key when it says Key: (nothing shows as you paste):",
+  `     printf 'Key: '; read -rs k; echo; security add-generic-password -s ${KEYCHAIN_SERVICE} -a openai -U -w "$k"; unset k`,
   "   Or set OPENAI_API_KEY instead. Never paste the key into your coding agent's chat.",
   "   Step by step: https://github.com/gug007/explaincast#set-up-your-openai-key",
 ].map((l) => `      ${l}`).join("\n");
@@ -25,6 +25,14 @@ function apiKey() {
     // no key under this name
   }
   throw new Error(`no OpenAI API key found:\n${KEY_STEPS}`);
+}
+
+// A 401 is most often a key cut short when it was saved, so it says how to
+// save it again.
+async function apiError(label, res) {
+  const body = await res.text();
+  if (res.status !== 401) return new Error(`${label}: ${res.status} ${body}`);
+  return new Error(`${label}: OpenAI refused the API key (401). Check it is the right key and save it again:\n${KEY_STEPS}\n      OpenAI said: ${body}`);
 }
 
 function durationMs(file) {
@@ -113,7 +121,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
         response_format: "wav",
       }),
     }, `tts ${line.id}`);
-    if (!res.ok) throw new Error(`tts ${line.id}: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await apiError(`tts ${line.id}`, res);
     const clip = Buffer.from(await res.arrayBuffer());
     if (tempo === 1) {
       fs.writeFileSync(wav, clip);
@@ -140,7 +148,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
       headers: { Authorization: `Bearer ${apiKey()}` },
       body: form,
     }, `words ${line.id}`);
-    if (!res.ok) throw new Error(`words ${line.id}: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await apiError(`words ${line.id}`, res);
     const out = ((await res.json()).words || []).map((w) => ({ word: w.word, start: w.start, end: w.end }));
     fs.writeFileSync(file, JSON.stringify(out));
     return out;
