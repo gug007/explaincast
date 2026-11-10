@@ -13,14 +13,15 @@ function spell(n) {
 }
 
 // Words as the transcript and the script both reduce to them: lowercase, no
-// punctuation, and numbers spelled out, so "96%" in one and "ninety-six
-// percent" in the other are the same three words.
+// punctuation or accents, and numbers spelled out, so "96%" in one and
+// "ninety-six percent" in the other are the same three words, and "всё" and
+// "все" (or "café" and "cafe") are the same word.
 const norm = (t) =>
   t
     .toLowerCase()
     .replace(/%/g, " percent")
     .replace(/(\d)\.(\d)/g, "$1 $2")
-    .replace(/ё/g, "е")
+    .normalize("NFD")
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/-/g, " ")
     .split(/\s+/)
