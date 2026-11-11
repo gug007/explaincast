@@ -1,11 +1,26 @@
 // The beat API every target shares: the narration clock, the pointer, zooms and
 // cards. A target adds how to find things and act on them: locate, glide,
-// pressAt, typeText, press, keys, hideCursor, showCursor.
+// pressAt, pressDown, dragGlide, release, typeText, sendKey, sendKeys,
+// hideCursor, showCursor.
 const fs = require("fs");
 const path = require("path");
-const { sleep, Timing } = require("./words");
+const { sleep, norm, findPhrase, Timing } = require("./words");
+const { keyCaps } = require("./keycaps");
 
 const label = (sel) => (typeof sel === "string" ? sel : JSON.stringify(sel));
+// The ease every glide uses: a gentle start and stop.
+const jerk = (t) => t * t * t * (10 + t * (-15 + 6 * t));
+
+// Small enough for the pointer (about 20 points) to hide much of it.
+const SMALL_CONTROL = { w: 200, h: 60 };
+
+// Pure: whether a control under the pointer ({ name, w, h } in points) is a
+// small one whose name the line `text` says.
+function coversNamed(hit, text) {
+  if (!hit?.name || hit.w > SMALL_CONTROL.w || hit.h > SMALL_CONTROL.h) return false;
+  const want = norm(hit.name);
+  return want.length > 0 && want.length <= 6 && findPhrase(norm(text), want) >= 0;
+}
 
 class Stage extends Timing {
   pollMs = 80;
@@ -20,6 +35,7 @@ class Stage extends Timing {
     this.frameNo = 0;
     this.cards = [];
     this.zooms = [];
+    this.presses = [];
     this.warnings = [];
     this.covered = false;
   }
@@ -152,6 +168,49 @@ class Stage extends Timing {
     return now;
   }
 
+  // Presses on `from`, carries it to `to` and lets go there. `at` aims inside
+  // `from` and `dropAt` inside `to`, as `at` does for a click; `cue` lands the
+  // pick-up on its word and `dragMs` is the carry. The real pointer moves in
+  // small steps, which drag-and-drop code needs to see a drag at all.
+  async drag(from, to, opts = {}) {
+    const pause = opts.pause ?? 160;
+    let p = await this.moveTo(from, { ...opts, pause });
+    await sleep(pause);
+    p = await this.settledPoint(from, opts.at, p);
+    await this.pressDown(p);
+    // Many drag libraries wait for a short hold before they lift an item.
+    await sleep(opts.hold ?? 220);
+    const end = await this.point(to, opts.dropAt);
+    await this.dragGlide(end.x, end.y, opts.dragMs ?? 900);
+    await sleep(160);
+    await this.release(end);
+    this.log(`drag ${label(from)} -> ${label(to)}`);
+    await sleep(opts.settle ?? 350);
+    return end;
+  }
+
+  async upload() {
+    throw new Error("s.upload is for web targets; in a window, click through the app's own file dialog");
+  }
+
+  // A key press shows as a badge under the window (keycaps.js) unless `badge`
+  // is false; `cue` presses it on that word.
+  async keys(combo, opts = {}) {
+    await this.notePress(combo, opts);
+    await this.sendKeys(combo);
+  }
+
+  async press(key, opts = {}) {
+    await this.notePress(key, opts);
+    await this.sendKey(key);
+  }
+
+  async notePress(combo, { cue, badge = true } = {}) {
+    if (cue) await this.holdForCue(cue, 0);
+    if (badge && this.t0) this.presses.push({ startMs: Date.now() - this.t0, caps: keyCaps(combo) });
+    this.log(`keys ${combo}`);
+  }
+
   // `words: true` types a word per burst, for long text.
   async type(text, opts = {}) {
     const parts = opts.words ? text.match(/\S+\s*|\s+/g) || [] : text;
@@ -195,4 +254,4 @@ class Stage extends Timing {
   }
 }
 
-module.exports = { Stage, label };
+module.exports = { Stage, label, jerk, coversNamed };

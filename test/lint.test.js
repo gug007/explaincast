@@ -109,3 +109,11 @@ test('"cover": "card" keeps the opening card; any other string is a mistake', ()
   assert.strictEqual(errors.length, 1);
   assert.match(errors[0], /cover is "card"/);
 });
+
+test("a web target's clock and mock are checked before a take", () => {
+  const target = { ...ok.target, clock: "2026-03-14T10:00", mock: { "**/api/plan": { name: "Team" } } };
+  assert.deepStrictEqual(checkVideo({ ...ok, target }, okBeats), { errors: [], warnings: [] });
+  const { errors } = checkVideo({ ...ok, target: { ...target, clock: "soon" } }, okBeats);
+  assert.strictEqual(errors.length, 1);
+  assert.match(errors[0], /"clock" is a date and time/);
+});

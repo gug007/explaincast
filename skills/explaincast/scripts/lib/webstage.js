@@ -4,10 +4,12 @@
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { chromium, CHROME } = require("./browser");
-const { Stage, label } = require("./stage");
+const fs = require("fs");
+const { Stage, label, jerk, coversNamed } = require("./stage");
 const { sleep } = require("./words");
 const { ZOOM } = require("./layout");
 const { OVERLAY_CSS, CURSOR_SVG, HOTSPOT, installStage } = require("./overlay");
+const { mockRoutes } = require("./fixtures");
 
 const KEY_NAMES = { cmd: "Meta", shift: "Shift", alt: "Alt", ctrl: "Control", return: "Enter", enter: "Enter", esc: "Escape", escape: "Escape", tab: "Tab", space: "Space", delete: "Backspace", down: "ArrowDown", up: "ArrowUp" };
 
@@ -42,6 +44,21 @@ class Screencast {
   }
 }
 
+// In the page: the control under the drawn pointer's tip, with its name and
+// size, or null when the pointer is hidden or on no control. The pointer,
+// its ring and the card take no hits, so they never answer for what is under
+// them.
+function controlAt({ x, y }) {
+  const cur = document.getElementById("explaincast-cursor");
+  if (!cur || cur.style.visibility === "hidden" || getComputedStyle(cur).display === "none") return null;
+  const hit = document.elementFromPoint(x, y);
+  const control = hit?.closest("button, a[href], input, select, textarea, summary, label, [role=button], [role=link], [role=tab], [role=menuitem], [role=checkbox], [role=radio], [role=switch], [role=option]");
+  if (!control) return null;
+  const r = control.getBoundingClientRect();
+  const name = (control.getAttribute("aria-label") || control.innerText || control.value || control.getAttribute("title") || "").trim().replace(/\s+/g, " ");
+  return { name, w: r.width, h: r.height };
+}
+
 class WebStage extends Stage {
   constructor(page, opts) {
     super(opts);
@@ -49,12 +66,25 @@ class WebStage extends Stage {
     this.pointer = { x: opts.origin.w * 0.56, y: opts.origin.h * 0.52 };
     this.noCursor = opts.noCursor;
     this.pageChecks = opts.pageChecks;
+    this.dir = opts.dir;
   }
 
-  // An idea page built on the kit reports what it would flag on screen (idea/stage.js lint).
+  // An idea page built on the kit reports what it would flag on screen
+  // (idea/stage.js lint); every page gets the pointer check.
   async endLine() {
-    if (!this.pageChecks) return;
-    for (const issue of await this.page.evaluate(() => window.stage?.lint?.() || [])) this.warn("page", issue);
+    if (this.pageChecks) {
+      for (const issue of await this.page.evaluate(() => window.stage?.lint?.() || [])) this.warn("page", issue);
+    }
+    await this.checkPointer();
+  }
+
+  // A pointer left on a small control hides it, and a line that names the
+  // control is about it, so the take says so.
+  async checkPointer() {
+    if (this.noCursor || this.covered || !this.line?.text) return;
+    const hit = await this.page.evaluate(controlAt, this.pointer).catch(() => null);
+    if (!coversNamed(hit, this.line.text)) return;
+    this.warn("pointer", `the pointer rests on "${hit.name}" as the line ends, and the line names it, so the pointer hides what it is about; move it beside, as in s.moveTo(sel, { at: [0.5, 1.6] })`);
   }
 
   async drawOverlay() {
@@ -124,15 +154,63 @@ class WebStage extends Stage {
     this.pointer = p;
   }
 
+  async pressDown(p) {
+    await this.page.evaluate(() => window.__lc?.tap());
+    await this.page.mouse.down();
+    this.pointer = p;
+  }
+
+  // The real mouse moves in steps with the drawn pointer, so whatever the page
+  // drags along stays under it.
+  async dragGlide(x, y, ms) {
+    const from = this.pointer;
+    const start = Date.now();
+    for (let t = 0; t < 1; await sleep(16)) {
+      t = Math.min(1, (Date.now() - start) / ms);
+      const s = jerk(t);
+      const p = [from.x + (x - from.x) * s, from.y + (y - from.y) * s];
+      await this.page.mouse.move(p[0], p[1]);
+      await this.page.evaluate(([px, py]) => window.__lc?.place(px, py), p).catch(() => {});
+    }
+    this.pointer = { x, y };
+  }
+
+  async release(p) {
+    await this.page.mouse.up();
+    this.pointer = p;
+  }
+
+  // Clicks the control that opens the file picker and picks `files` (paths
+  // from the video folder) in it. A headless take never draws the picker, so
+  // the file is simply there after the click. `verify` waits for what the page
+  // shows once it has the file.
+  async upload(sel, files, opts = {}) {
+    const list = [].concat(files).map((f) => path.resolve(this.dir || ".", f));
+    for (const f of list) if (!fs.existsSync(f)) throw new Error(`upload: ${f} is not there (a relative path starts at the video folder)`);
+    const chooser = this.page.waitForEvent("filechooser", { timeout: opts.timeout ?? 5000 });
+    chooser.catch(() => {});
+    await this.click(sel, { ...opts, verify: undefined });
+    let picker;
+    try {
+      picker = await chooser;
+    } catch {
+      throw new Error(`upload: clicking ${label(sel)} opened no file picker; aim it at the button or drop zone that opens one`);
+    }
+    await picker.setFiles(list);
+    this.log(`upload ${list.map((f) => path.basename(f)).join(", ")}`);
+    if (typeof opts.verify === "function") await this.until(opts.verify, { timeout: opts.verifyMs ?? 8000, label: "the upload" });
+    else if (opts.verify) await this.waitFor(opts.verify, opts.verifyMs ?? 8000);
+  }
+
   typeText(text) {
     return this.page.keyboard.type(text);
   }
 
-  press(key) {
+  sendKey(key) {
     return this.page.keyboard.press(key);
   }
 
-  keys(combo) {
+  sendKeys(combo) {
     return this.page.keyboard.press(combo.split("+").map((k) => KEY_NAMES[k.toLowerCase()] || (k.length === 1 ? k.toUpperCase() : k)).join("+"));
   }
 
@@ -175,6 +253,16 @@ async function openWeb({ video, dir, frame, log }) {
     bypassCSP: true,
     colorScheme: t.colorScheme || "light",
   });
+  // The same page in every take (fixtures.js): its time starts at "clock" and
+  // runs on, timers and animations at their real pace, and "mock" answers its
+  // requests with saved data.
+  if (t.clock != null) {
+    await context.clock.install({ time: t.clock });
+    log(`clock: the page's time starts at ${t.clock}`);
+  }
+  const routes = mockRoutes(t.mock, dir);
+  for (const [glob, reply] of routes) await context.route(glob, (route) => route.fulfill(reply));
+  if (routes.length) log(`mock: ${routes.length} URL pattern(s) answered from video.json`);
   const page = await context.newPage();
   await fitWindow(context, page, frame);
   const url = t.file ? pathToFileURL(path.resolve(dir, t.file)).href : t.url;

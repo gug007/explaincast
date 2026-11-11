@@ -10,6 +10,7 @@ const { OUT, ZOOM, frameFor } = require("./layout");
 const { recordTake, renderTimelineCards, GAP_MS, LEAD_MS, TAIL_MS } = require("./record");
 const { cardLook, renderThumbnail } = require("./cards");
 const { videoGraph, frameAssets, frameBox, editZooms, CAPTURE_IN, SCREENCAST_IN } = require("./compose");
+const { keyBadges, renderKeyBadges } = require("./keycaps");
 const { makeVoice } = require("./voice");
 const { DEFAULT_BED, RATE, soundtrack } = require("./mix");
 const { beginTake, failTake, promote, finishDryTake } = require("./takes");
@@ -62,7 +63,7 @@ const captureIn = video.target.type === "web" ? SCREENCAST_IN : CAPTURE_IN;
 // "look" (look.js). Read when the render starts, so --mux-only applies a change.
 let look;
 // What moves with a take when a newer one replaces it.
-const MEDIA = ["record.mkv", "timeline.json", `${slug}.mp4`, `${slug}.srt`, "chapters.txt", "youtube.txt", "cards", "qa"];
+const MEDIA = ["record.mkv", "timeline.json", `${slug}.mp4`, `${slug}.srt`, `${slug}.vtt`, "transcript.txt", "chapters.txt", "youtube.txt", "cards", "qa"];
 // The current take and its render.
 const P = { raw: path.join(DIR, "record.mkv"), timeline: path.join(DIR, "timeline.json"), mp4: path.join(DIR, `${slug}.mp4`) };
 
@@ -128,7 +129,10 @@ async function mux(lines, { file, crf = 18, audio = true }) {
   if (zooms.some((z) => z.id)) console.log(`zooms: ${zooms.map((z) => z.id).join(" ")} (video.json "zooms" adjusts one by id)`);
   const box = frameBox(OUT, frame, ZOOM);
   const assets = await frameAssets(path.join(path.dirname(DIR), "_frame"), { out: OUT, frame: { ...frame, zoom: ZOOM }, box, look });
-  const graph = videoGraph({ ...assets, out: OUT, box, cards: timeline.cards || [], cardFiles: timeline.cardFiles || [], zooms, totalMs, take: P.raw, captureIn });
+  const keys = video.keys === false ? [] : keyBadges(timeline.keys, { totalMs });
+  const keyFiles = await renderKeyBadges(path.join(path.dirname(DIR), "_frame"), keys);
+  if (keys.length) console.log(`keys: ${keys.length} badge(s) (video.json "keys": false leaves them out)`);
+  const graph = videoGraph({ ...assets, out: OUT, box, cards: timeline.cards || [], cardFiles: timeline.cardFiles || [], zooms, keys, keyFiles, totalMs, take: P.raw, captureIn });
   const inputs = ["-i", P.raw, ...graph.inputs];
   let filter = graph.filter;
   const maps = ["-map", graph.label];
@@ -211,7 +215,8 @@ function writeYoutube(list) {
 // What a public upload would trip on goes into the report with the rest.
 async function finish(lines, timeline, taken) {
   const srt = P.mp4.replace(/\.mp4$/, ".srt");
-  console.log(`captions: ${writeCaptions(srt, timeline, lines)} -> ${srt}`);
+  const caps = writeCaptions(srt, timeline, lines, video);
+  console.log(`captions: ${caps.cues} -> ${srt}, ${caps.vtt}; transcript -> ${caps.transcript}`);
   const more = [];
   if (audience.chapters) {
     const spoken = Object.fromEntries(lines.filter((l) => l.words?.length).map((l) => [l.id, { last: l.words.at(-1).end * 1000 }]));

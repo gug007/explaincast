@@ -21,7 +21,7 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms.
 5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render. It records in real time and then renders, so give the command a timeout well past the length step 3 printed.
 6. Fix every warning, read `qa/report.json`, and look at `qa/sheet.jpg`, which has a tile for each line, card and zoom, and at `thumbnail.jpg`, whose moment the report's `thumbnail` names. A FAIL means the video isn't ready. A pass covers only what the report lists, so judge the tiles yourself.
-7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` beside it, not burned in.
+7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` and `.vtt` beside it, not burned in, with the script in `transcript.txt`.
 
 Any change to the narration or the beats needs a new take. `--mux-only` renders the last take again without recording, after changing `music`, `look` or a recorded zoom (`zooms`). `--respeak` voices every line again, for a clip that came out wrong.
 
@@ -50,9 +50,9 @@ A project can set defaults in `.explaincast.json` at its root: `target`, `for`, 
 ## Rules
 
 - Say a control's name, then click it on that word (`cue`). A beat that runs past its word warns, and a late click reads as a mistake.
-- Rest the pointer beside what a line is about, never on it. A pointer on a small target hides it, and no check can tell.
+- Rest the pointer beside what a line is about, never on it. A pointer on a small target hides it. A web take warns when it rests on a control the line names; a window take can't tell.
 - Check every claim the narration makes against the real product. Sample data or a demo build can behave differently.
 - Keep each video standalone: no teasers, and no YAML, config or CLI detail unless that is the topic.
-- The checks flag the user's own details, any email address and `hide` terms, but know no other names, and nothing is blurred. For client work, record demo or staging data and list the client's sensitive terms in `hide`.
+- The checks flag the user's own details, any email address and `hide` terms, but know no other names, and nothing is blurred. For client work, record demo or staging data, or answer the app's requests with saved data (`mock`), and list the client's sensitive terms in `hide`. A web video that shows dates or "3 minutes ago" sets `clock`, so every take shows the same.
 - Narration goes to OpenAI. Check before voicing anything confidential.
 - `setup` runs off camera. Read credentials from the environment there, never from `video.json` or `beats.js`.

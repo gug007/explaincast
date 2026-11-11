@@ -77,7 +77,7 @@ In Claude Code:
 
 In Codex, type `$explaincast How checkout works`. In other agents, ask for it by name: "Use explaincast to make a video of how checkout works."
 
-Say what to explain. The agent picks how to record it, writes the script, proves every click in a free dry run, records the take and reviews it. Each video gets a folder in `~/Movies/explaincast/` (set `EXPLAINCAST_DIR` to move it), holding the MP4 and its `.srt` captions. Captions are not burned in.
+Say what to explain. The agent picks how to record it, writes the script, proves every click in a free dry run, records the take and reviews it. Each video gets a folder in `~/Movies/explaincast/` (set `EXPLAINCAST_DIR` to move it), holding the MP4, its `.srt` and `.vtt` captions and a `transcript.txt` of the script. Captions are not burned in.
 
 To change something, ask the agent. It records again and voices only the lines you changed.
 
@@ -111,7 +111,7 @@ Every video, client ones included, uses explaincast's own look by default: a war
 ## Good to know
 
 - **Your narration goes to OpenAI**, for speech and transcription, on your own key. The recording stays on your Mac. Check before narrating anything confidential.
-- **Nothing is blurred.** The checks flag your own account details, email addresses and any terms you list in `hide`, but they know no other names. For client work, record demo or staging data.
+- **Nothing is blurred.** The checks flag your own account details, email addresses and any terms you list in `hide`, but they know no other names. For client work, record demo or staging data, or have a web video answer the app's requests with saved data (`mock` in [reference/beats.md](skills/explaincast/reference/beats.md)).
 - **Music:** public videos use "Vastness" by Andrew Ev from [Mixkit](https://mixkit.co/license/#musicFree), free for use in videos. Mixkit's terms forbid redistributing the file, so it isn't in this repo: the first public video downloads it. Set `"music": false` in `video.json` to go without.
 
 ## Development

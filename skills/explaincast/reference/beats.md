@@ -6,7 +6,7 @@
 | --- | --- |
 | `title` | The video's title |
 | `for` | `public`, `client` or `me` |
-| `target` | `{ type: "web", url \| file, cursor, colorScheme }` or `{ type: "window", app \| launch }`; both take `width`, `height` (default 1100×620 points, at most 1200×680). `file` is relative to the folder. `cursor: false` hides the drawn pointer. `launch` is `[command, ...args]`: a copy of its own, ended after the take, where `app` uses the running app's largest window |
+| `target` | `{ type: "web", url \| file, cursor, colorScheme, clock, mock }` or `{ type: "window", app \| launch }`; both take `width`, `height` (default 1100×620 points, at most 1200×680). `file` is relative to the folder. `cursor: false` hides the drawn pointer. `launch` is `[command, ...args]`: a copy of its own, ended after the take, where `app` uses the running app's largest window. `clock` (web) is when the page's time starts, as in `"2026-03-14T10:00"` on this Mac's clock; it runs on from there, the same in every take. `mock` (web) answers requests instead of the server: `{ "**/api/user": "fixtures/user.json", "https://api.example.com/plan": { "name": "Team" } }`, a file from the folder or the JSON itself, and the first pattern that matches wins |
 | `narration` | `[{ id, text, chapter? }]`, one beat per id, in order. A line without `text` is a silent pause of `ms`. `chapter` names a chapter from that line on |
 | `brand` | The closing card's words; the end is `{ "id": "outro", "ms": 3200 }` with `s.card(brand, { hold: true })` |
 | `look` | A brand's look for the cards, the thumbnail and the canvas behind the window: `{ canvas, ink, font, logo, pools }`, every field optional. Without it, explaincast's own (warm canvas, serif, pools) for every audience, client videos included. `canvas` and `ink` are colours (`"#0e2a3c"`, `rgb()`, `hsl()`); `font` is a `.woff2`, `.woff`, `.ttf` or `.otf` file, or the name of a font installed on the Mac; `logo` is an `.svg`, `.png`, `.jpg` or `.webp` set above the words of a held card, the closing one; `pools` is `true`, `false` or one to three colours, and a brand's own `canvas` is flat unless it asks for them. Paths start at the video folder. `--mux-only` applies a change |
@@ -18,6 +18,7 @@
 | `zooms` | Changes to recorded zooms, by the id the render log prints, applied with `--mux-only`: `{ "line#1": { scale, at, ms, drop } }` |
 | `cover` | `{ words, line, at, crop, style: "window" \| "closeup" }` or `{ image }`: the thumbnail. Without one, a public video's thumbnail is the opening card's words beside the window at the take's best still: a settled moment of a main view, full of content, with nothing the checks flag. The render log and `qa/report.json` give it as a `cover` to pin or change. `"card"` keeps the words alone |
 | `speedUpWaits` | `false` keeps waits real time. By default a silence over 2.5 s between lines plays faster under a badge |
+| `keys` | `false` leaves out the badges that show the keys `s.keys` and `s.press` pressed. `--mux-only` applies a change |
 | `youtube` | `{ hook: [], learn: [], tags: [] }` for `youtube.txt` |
 
 ## beats.js
@@ -37,7 +38,9 @@ The runner waits for each line's clip plus a short gap before the next beat. A b
 | --- | --- |
 | `s.click(sel, { at, ms, cue, settle, verify, verifyMs })` | Glides, then presses where the target is now. `verify` (a selector that must become visible, or an async fn) must pass or the press repeats, twice at most, then the take stops. Use it wherever a missed click would ruin the rest |
 | `s.moveTo(sel, { at, ms, cue, after })` | `at` is `[x, y]` in the target, 0–1 inside it; outside that range rests the pointer beside it (`[0.5, 1.4]` sits just below). `cue` finishes the glide on that word |
-| `s.type(text, { words, after })`, `s.press("Enter")`, `s.keys("cmd+k")` | `words: true` types in bursts, for long text |
+| `s.drag(from, to, { at, dropAt, cue, ms, dragMs, hold, settle })` | Presses on `from`, carries it to `to` and lets go. `at` aims inside `from`, `dropAt` inside `to`; `cue` lands the pick-up on its word. The real pointer moves in steps, so drag-and-drop code sees a drag |
+| `s.type(text, { words, after })` | `words: true` types in bursts, for long text |
+| `s.press("Enter", { cue, badge })`, `s.keys("cmd+k", { cue, badge })` | Each press shows its keys as a badge under the window for a moment (`⌘ K`); `badge: false` leaves one out, video.json `"keys": false` all of them. `cue` presses on that word |
 | `s.zoom(sel, { scale, at, ms, cue })`, `s.zoomOut({ ms, cue })` | 1.6–2 for a small control; stays until zoomed out, and a second zoom pans from the first. The crop stops at the canvas, so a target near an edge sits off-centre. Use a few per video |
 | `s.card(title, { hold, until, ms })` | Title left; the window's left 58% live at its right, so whatever a beat does behind a card shows there. `until: "<cue>"` ends it on that word |
 | `s.hideCursor()`, `s.showCursor()` | A card shows the cursor again when it ends |
@@ -45,7 +48,9 @@ The runner waits for each line's clip plus a short gap before the next beat. A b
 | `s.at("phrase")`, `s.hold(ms)`, `s.holdUntil(msIntoLine)`, `s.cueMs("phrase")` | The narration clock. `at` waits for a word, and warns when the beat is already past it |
 | `s.warn(kind, message)`, `s.frame(name)`, `s.log(m)` | Warnings reach the checks; `frame` writes an extra image to `frames/` |
 
-Web only: `s.page` is the Playwright page and `s.scrollTo(sel)` scrolls on camera. A target outside the view scrolls in by itself before a click or zoom.
+Web only: `s.page` is the Playwright page and `s.scrollTo(sel)` scrolls on camera. A target outside the view scrolls in by itself before a click or zoom. `s.upload(sel, files, { verify, ...click })` clicks the control that opens the file picker and picks `files` (paths from the video folder); a headless take draws no picker, so the file is simply there.
+
+At the end of every line, a web take warns when the pointer rests on a small control the line names, since it hides what the line is about.
 
 ## Idea pages
 

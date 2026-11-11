@@ -6,6 +6,7 @@ const path = require("path");
 const { norm, findPhrase } = require("./words");
 const { audienceOf } = require("./audience");
 const { lookProblems } = require("./look");
+const { fixtureProblems } = require("./fixtures");
 
 const MAX_FRAME = { w: 1200, h: 680 };
 
@@ -44,6 +45,7 @@ function checkTarget(t, errors, dir) {
   }
   if (t.type === "window" && !t.app && !t.launch) errors.push('a window target needs "app" or "launch"');
   if ((t.width || 0) > MAX_FRAME.w || (t.height || 0) > MAX_FRAME.h) errors.push(`the target is at most ${MAX_FRAME.w}x${MAX_FRAME.h} points, or it runs off the canvas`);
+  errors.push(...fixtureProblems(t, dir));
 }
 
 // Whether video.json "youtube" still holds new.js's placeholders.
@@ -133,6 +135,7 @@ function checkVideo(video, beats, { dir = null } = {}) {
 // video.json "speedUpWaits" and "cover" (edit.js, cover.js).
 function checkEdit(video, ids, errors, warnings, dir) {
   if (video.speedUpWaits != null && typeof video.speedUpWaits !== "boolean") errors.push('video.json "speedUpWaits" is true or false');
+  if (video.keys != null && typeof video.keys !== "boolean") errors.push('video.json "keys" is true or false (false leaves out the key badges)');
   const cover = video.cover;
   if (typeof cover === "string") {
     if (cover !== "card") errors.push(`video.json cover is "card", { "image" } or { "words", "line", ... } (got "${cover}")`);

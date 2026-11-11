@@ -6,13 +6,12 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync, spawn } = require("child_process");
-const { Stage, label } = require("./stage");
+const { Stage, label, jerk } = require("./stage");
 const { Capture } = require("./capture");
 const { helper } = require("./helpers");
 const { sleep } = require("./words");
 
 const osa = (...lines) => execFileSync("osascript", lines.flatMap((l) => ["-e", l]), { encoding: "utf8" }).trim();
-const jerk = (t) => t * t * t * (10 + t * (-15 + 6 * t));
 const KEY_CODES = { return: 36, enter: 36, esc: 53, escape: 53, tab: 48, space: 49, delete: 51, backspace: 51, down: 125, up: 126, left: 123, right: 124 };
 const KEY_NAMES = { arrowdown: "down", arrowup: "up", arrowleft: "left", arrowright: "right", " ": "space" };
 
@@ -82,13 +81,15 @@ class WindowStage extends Stage {
     return { x: x * this.origin.w, y: y * this.origin.h, w: w * this.origin.w, h: h * this.origin.h };
   }
 
-  async glide(x, y, ms) {
+  // `move` places the real pointer at each step: a plain move, or while a
+  // button is held, a drag (dragGlide).
+  async glide(x, y, ms, move = (px, py) => this.realMove(px, py)) {
     const from = this.pointer;
     const start = Date.now();
     for (let t = 0; t < 1; await sleep(8)) {
       t = Math.min(1, (Date.now() - start) / ms);
       const s = jerk(t);
-      this.realMove(from.x + (x - from.x) * s, from.y + (y - from.y) * s);
+      move(from.x + (x - from.x) * s, from.y + (y - from.y) * s);
     }
     this.pointer = { x, y };
   }
@@ -123,17 +124,39 @@ class WindowStage extends Stage {
     this.pointer = p;
   }
 
+  async pressDown(p) {
+    await this.ensureFrontmost("dragging");
+    this.checkWindow();
+    const s = this.screen(p.x, p.y);
+    await this.clearAt(s);
+    execFileSync("cliclick", [`dd:${s.x},${s.y}`]);
+    this.pointer = p;
+  }
+
+  dragGlide(x, y, ms) {
+    return this.glide(x, y, ms, (px, py) => {
+      const s = this.screen(px, py);
+      execFileSync("cliclick", [`dm:${s.x},${s.y}`]);
+    });
+  }
+
+  async release(p) {
+    const s = this.screen(p.x, p.y);
+    execFileSync("cliclick", [`du:${s.x},${s.y}`]);
+    this.pointer = p;
+  }
+
   async typeText(text) {
     await this.ensureFrontmost("typing");
     execFileSync("cliclick", [`t:${text}`]);
   }
 
-  press(key) {
+  sendKey(key) {
     const name = key.toLowerCase();
-    return this.keys(KEY_NAMES[name] || name);
+    return this.sendKeys(KEY_NAMES[name] || name);
   }
 
-  async keys(combo) {
+  async sendKeys(combo) {
     await this.ensureFrontmost(`pressing ${combo}`);
     const parts = combo.toLowerCase().split("+");
     const key = parts.pop();

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const { buildCues, toSrt, wrap } = require("../skills/explaincast/scripts/lib/captions");
+const { buildCues, toSrt, toVtt, transcript, wrap } = require("../skills/explaincast/scripts/lib/captions");
 const { chapters } = require("../skills/explaincast/scripts/lib/chapters");
 
 const words = (text, step = 280) => text.split(" ").map((word, i) => ({ word, start: (i * step) / 1000, end: (i * step + 240) / 1000 }));
@@ -94,4 +94,26 @@ test("a chapter starts on the second nearer its line, never on the tail of the l
   };
   const video = { narration: [{ id: "a", text: "x" }, { id: "b", text: "x", chapter: "B" }, { id: "c", text: "x", chapter: "C" }, { id: "d", text: "x", chapter: "D" }] };
   assert.deepStrictEqual(chapters(t, video).list.map((c) => c.ms), [0, 60000, 75000, 100000]);
+});
+
+test("the same cues as WebVTT, with a dot before the milliseconds", () => {
+  const vtt = toVtt([{ startMs: 500, endMs: 3661001, text: "a\nb" }, { startMs: 3661001, endMs: 3662000, text: "c" }]);
+  assert.strictEqual(vtt, "WEBVTT\n\n00:00:00.500 --> 01:01:01.001\na\nb\n\n01:01:01.001 --> 01:01:02.000\nc\n");
+});
+
+test("the transcript is the script, a paragraph a line, under its chapters", () => {
+  const t = {
+    totalMs: 90000,
+    cards: [{ title: "Video", startMs: 500, ms: 3000, first: true }, { title: "Second part", startMs: 30050, ms: 2000 }],
+    lines: [
+      { id: "a", startMs: 500, ms: 3000 },
+      { id: "b", startMs: 30000, ms: 3000 },
+      { id: "c", startMs: 60000, ms: 3000 },
+      { id: "outro", startMs: 86000, ms: 3200 },
+    ],
+  };
+  const video = { title: "Video", narration: [{ id: "a", text: "First, *this*." }, { id: "b", text: "Then that." }, { id: "c", text: "Last one.", chapter: "Third part" }, { id: "outro", ms: 3200 }] };
+  assert.strictEqual(transcript(t, video), "Video\n\nIntro (0:00)\n\nFirst, this.\n\nSecond part (0:30)\n\nThen that.\n\nThird part (1:00)\n\nLast one.\n");
+  const plain = transcript({ ...t, cards: [] }, { ...video, narration: video.narration.map(({ chapter, ...n }) => n) });
+  assert.strictEqual(plain, "Video\n\nFirst, this.\n\nThen that.\n\nLast one.\n");
 });

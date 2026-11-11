@@ -76,3 +76,14 @@ test("a web or app video gets no page", (t) => {
   assert.ok(!fs.existsSync(path.join(dir, "idea")));
   assert.doesNotMatch(fs.readFileSync(path.join(dir, "beats.js"), "utf8"), /window\.go/);
 });
+
+test("a project's web clock and mock reach a video that names its own URL, with the mock's files named from the project", (t) => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "explaincast-new-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const mock = { "**/api/user": "fixtures/user.json", "**/api/plan": { name: "Team" } };
+  fs.writeFileSync(path.join(root, ".explaincast.json"), JSON.stringify({ for: "me", target: { type: "web", url: "http://localhost:3000", clock: "2026-03-14T10:00", mock } }));
+  const want = { clock: "2026-03-14T10:00", mock: { "**/api/user": path.join(root, "fixtures/user.json"), "**/api/plan": { name: "Team" } } };
+  assert.deepStrictEqual(load(scaffold(t, ["Checkout"], root).dir).video.target, { type: "web", url: "http://localhost:3000", ...want });
+  assert.deepStrictEqual(load(scaffold(t, ["Settings", "--url", "http://localhost:3000/settings"], root).dir).video.target, { type: "web", url: "http://localhost:3000/settings", ...want });
+  assert.deepStrictEqual(load(scaffold(t, ["Notes", "--app", "Notes"], root).dir).video.target, { type: "window", app: "Notes" });
+});

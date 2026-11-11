@@ -6,6 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 const { norm, onsets } = require("./words");
+const { chapters, mmss } = require("./chapters");
 
 const LINE_CHARS = 42;
 const CUE_CHARS = LINE_CHARS * 2;
@@ -136,21 +137,54 @@ function buildCues(timeline, lines) {
   return cues.filter((c) => c.endMs > c.startMs);
 }
 
-const clock = (ms) => {
+// SRT writes a comma before the milliseconds, WebVTT a dot.
+const clock = (ms, sep = ",") => {
   const t = Math.max(0, Math.round(ms));
   const h = Math.floor(t / 3600000);
   const m = Math.floor((t % 3600000) / 60000);
   const s = Math.floor((t % 60000) / 1000);
   const two = (n) => String(n).padStart(2, "0");
-  return `${two(h)}:${two(m)}:${two(s)},${String(t % 1000).padStart(3, "0")}`;
+  return `${two(h)}:${two(m)}:${two(s)}${sep}${String(t % 1000).padStart(3, "0")}`;
 };
 
 const toSrt = (cues) => cues.map((c, i) => `${i + 1}\n${clock(c.startMs)} --> ${clock(c.endMs)}\n${c.text}\n`).join("\n");
 
-function writeCaptions(file, timeline, lines) {
-  const cues = buildCues(timeline, lines);
-  fs.writeFileSync(file, toSrt(cues));
-  return cues.length;
+// The same cues for a web page's <track> and most docs sites.
+const toVtt = (cues) => `WEBVTT\n\n${cues.map((c) => `${clock(c.startMs, ".")} --> ${clock(c.endMs, ".")}\n${c.text}\n`).join("\n")}`;
+
+// A chapter's heading goes before the first line that starts no more than this
+// after it: YouTube rounds a chapter to the second before its line.
+const HEADING_SLACK_MS = 1000;
+
+// The narration as plain text, for a post or a docs page: the title, then a
+// paragraph per spoken line, under the chapters' names when there are two or
+// more. `timeline` is the MP4's.
+function transcript(timeline, video) {
+  const byId = new Map((video.narration || []).map((n) => [n.id, n]));
+  const { list } = chapters(timeline, video);
+  const marks = list.length > 1 ? [...list] : [];
+  const out = [video.title || "", ""];
+  for (const t of timeline.lines) {
+    const text = byId.get(t.id)?.text?.replace(/\*/g, "").trim();
+    if (!text) continue;
+    while (marks.length && marks[0].ms < t.startMs + HEADING_SLACK_MS) {
+      const m = marks.shift();
+      out.push(`${m.name} (${mmss(m.ms)})`, "");
+    }
+    out.push(text, "");
+  }
+  return `${out.join("\n").trim()}\n`;
 }
 
-module.exports = { buildCues, toSrt, writeCaptions, wrap };
+// The .srt at `srt`, a .vtt beside it and transcript.txt in the same folder.
+function writeCaptions(srt, timeline, lines, video = {}) {
+  const cues = buildCues(timeline, lines);
+  const vtt = srt.replace(/\.srt$/, ".vtt");
+  const text = path.join(path.dirname(srt), "transcript.txt");
+  fs.writeFileSync(srt, toSrt(cues));
+  fs.writeFileSync(vtt, toVtt(cues));
+  fs.writeFileSync(text, transcript(timeline, video));
+  return { cues: cues.length, vtt, transcript: text };
+}
+
+module.exports = { buildCues, toSrt, toVtt, transcript, writeCaptions, wrap };

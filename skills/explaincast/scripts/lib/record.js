@@ -83,7 +83,7 @@ async function recordTake({ video, dir, lines, beats, raw, framesDir, errorShot,
     later(() => rec.stop(Date.now() - t0));
     capture = await target.capture((f) => rec.frame(f));
     later(() => capture.stop());
-    stage = target.stage({ capture, framesDir, log, out: OUT, box: frameBox(OUT, frame, ZOOM) });
+    stage = target.stage({ capture, framesDir, log, dir, out: OUT, box: frameBox(OUT, frame, ZOOM) });
     later(() => stage.finish());
     await stage.install();
     await stage.cover();
@@ -101,7 +101,7 @@ async function recordTake({ video, dir, lines, beats, raw, framesDir, errorShot,
     stopping = true;
     await capture.stop();
     await rec.stop(totalMs);
-    return { totalMs, lines: timeline, cards: stage.cards, zooms: stage.zooms, target: video.target.type, ...(stage.warnings.length && { warnings: stage.warnings }) };
+    return { totalMs, lines: timeline, cards: stage.cards, zooms: stage.zooms, keys: stage.presses, target: video.target.type, ...(stage.warnings.length && { warnings: stage.warnings }) };
   } catch (e) {
     stopping = true;
     if (capture?.latest) {

@@ -8,6 +8,7 @@ const path = require("path");
 const { CARD_FADE_MS, OPEN_LIFT, POOLS_AT_REST } = require("./overlay");
 const { DEFAULT_LOOK } = require("./look");
 const { track, toFrames } = require("./keyframes");
+const { AT: KEY_AT } = require("./keycaps");
 
 const FPS = 30;
 
@@ -181,9 +182,14 @@ const MASTER_TAGS = ["-colorspace", "bt709", "-color_primaries", "bt709", "-colo
 // which every viewer decodes as full-range BT.601.
 const STILL_OUT = "out_color_matrix=bt601:out_range=pc";
 
+// Each key badge (keycaps.js) is a still read only for as long as it shows,
+// eased in and out, laid over the picture after the zoom and under the cards.
+const KEY_FADE = { in: 0.12, out: 0.2 };
+
 // ffmpeg inputs and the video half of the filter graph. Input 0 is the take;
-// the caller appends the audio inputs after these.
-function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = [], zooms = [], totalMs, take, captureIn = CAPTURE_IN }) {
+// the caller appends the audio inputs after these. `keys` are key badges as
+// { startMs, ms } with `keyFiles` their pictures.
+function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = [], zooms = [], keys = [], keyFiles = [], totalMs, take, captureIn = CAPTURE_IN }) {
   const inputs = [];
   const parts = [];
   const opener = cards.find((c) => c.first && !c.hold);
@@ -215,6 +221,22 @@ function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = []
     parts.push(`[${last}]${zoomStage(zooms, out)}[vz]`);
     last = "vz";
   }
+  // The badges' inputs come after the cards' and the late spans', so their
+  // numbers are known before those are added.
+  const keyInputs = [];
+  const firstKey = next + cards.length + 3 * late.length;
+  keys.forEach((k, i) => {
+    const at = k.startMs / 1000;
+    const len = k.ms / 1000;
+    keyInputs.push("-framerate", String(FPS), "-loop", "1", "-t", len.toFixed(3), "-i", keyFiles[i]);
+    const fades = [`fade=t=in:st=0:d=${KEY_FADE.in}:alpha=1`];
+    if (len > KEY_FADE.in + KEY_FADE.out) fades.push(`fade=t=out:st=${(len - KEY_FADE.out).toFixed(3)}:d=${KEY_FADE.out}:alpha=1`);
+    parts.push(
+      `[${firstKey + i}:v]format=rgba,${fades.join(",")},setpts=PTS-STARTPTS+${at.toFixed(3)}/TB[k${i}]`,
+      `[${last}][k${i}]overlay=x=${Math.round(out.width * KEY_AT.x)}-overlay_w/2:y=${Math.round(out.height * KEY_AT.y)}-overlay_h/2:eof_action=pass:enable='between(t,${at.toFixed(3)},${(at + len).toFixed(3)})'[vk${i}]`,
+    );
+    last = `vk${i}`;
+  });
   const fade = CARD_FADE_MS / 1000;
   cards.forEach((card, i) => {
     inputs.push("-i", cardFiles[i]);
@@ -253,6 +275,7 @@ function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = []
     );
     input += 3;
   }
+  inputs.push(...keyInputs);
   const count = inputs.filter((a) => a === "-i").length;
   parts.push(`[${last}]${MASTER_OUT}[vout]`);
   return { inputs, filter: parts.join(";"), label: "[vout]", count, tags: MASTER_TAGS };

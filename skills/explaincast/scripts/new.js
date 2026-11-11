@@ -12,6 +12,7 @@ const path = require("path");
 const { parseArgs } = require("util");
 const { AUDIENCES } = require("./lib/audience");
 const { isFontFile } = require("./lib/look");
+const { mockFrom } = require("./lib/fixtures");
 
 const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]';
 const DEFAULT_KEYS = ["target", "for", "brand", "look", "hide", "pronounce", "heard", "voice", "style"];
@@ -43,6 +44,7 @@ function projectDefaults(from = process.cwd()) {
       console.log(`defaults from ${file}`);
       const picked = Object.fromEntries(DEFAULT_KEYS.filter((k) => k in all).map((k) => [k, all[k]]));
       if (picked.look) picked.look = lookFrom(picked.look, dir);
+      if (picked.target?.mock) picked.target = { ...picked.target, mock: mockFrom(picked.target.mock, dir) };
       return picked;
     }
     if (dir === path.dirname(dir)) return {};
@@ -62,7 +64,9 @@ const { values: o, positionals } = parseArgs({
 const title = positionals[0];
 if (!title) fail(USAGE);
 const defaults = projectDefaults();
-const target = o.url ? { type: "web", url: o.url } : o.file ? { type: "web", file: o.file, cursor: false } : o.app ? { type: "window", app: o.app } : defaults.target;
+// A project's web "clock" and "mock" stay with a video that names its own URL.
+const fixed = ({ type, clock, mock } = {}) => (type === "web" ? { ...(clock != null && { clock }), ...(mock != null && { mock }) } : {});
+const target = o.url ? { type: "web", url: o.url, ...fixed(defaults.target) } : o.file ? { type: "web", file: o.file, cursor: false } : o.app ? { type: "window", app: o.app } : defaults.target;
 if (!target) fail(`what does the video show?\n${USAGE}`);
 const audience = o.for || defaults.for || "public";
 if (!AUDIENCES[audience]) fail(`--for is ${Object.keys(AUDIENCES).join(", ")}`);

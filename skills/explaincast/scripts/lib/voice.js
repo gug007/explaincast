@@ -8,6 +8,9 @@ const { alignWords } = require("./words");
 
 const MODEL = "gpt-4o-mini-tts";
 const SILENT_MS = 3000;
+// Lines voiced at once: each is a speech call and a transcription call, well
+// under a paid account's per-minute limits.
+const JOBS = 4;
 const KEYCHAIN_SERVICE = "explaincast";
 const KEY_STEPS = [
   "1. Create a key at https://platform.openai.com/api-keys (the account needs billing set up)",
@@ -28,9 +31,12 @@ function apiKey() {
 }
 
 // A 401 is most often a key cut short when it was saved, so it says how to
-// save it again.
+// save it again; a 429 for quota is an account with no credit left.
 async function apiError(label, res) {
   const body = await res.text();
+  if (res.status === 429 && body.includes("insufficient_quota")) {
+    return new Error(`${label}: the OpenAI account is out of credit (429). Add a payment method or credits at https://platform.openai.com/settings/organization/billing, then run again.\n      OpenAI said: ${body}`);
+  }
   if (res.status !== 401) return new Error(`${label}: ${res.status} ${body}`);
   return new Error(`${label}: OpenAI refused the API key (401). Check it is the right key and save it again:\n${KEY_STEPS}\n      OpenAI said: ${body}`);
 }
@@ -44,19 +50,55 @@ function durationMs(file) {
   return Math.round(parseFloat(out) * 1000);
 }
 
-// A dropped connection or a 5xx is retried; anything else is a real error.
-async function post(url, init, label) {
+const TRIES = 3;
+const RETRY_AFTER_MAX_MS = 30000;
+
+// How long a rate-limited reply asks to wait, from its retry-after header.
+function retryAfterMs(res) {
+  const s = parseFloat(res.headers.get("retry-after"));
+  return Number.isFinite(s) && s >= 0 ? Math.min(s * 1000, RETRY_AFTER_MAX_MS) : 0;
+}
+
+// A dropped connection, a 5xx or a rate limit (429) is tried again, a rate
+// limit no sooner than its retry-after; anything else, an account out of
+// credit included, is a real error. `waitMs` is the pause before attempt n+1.
+async function post(url, init, label, { waitMs = (n) => 1500 * n } = {}) {
   for (let attempt = 1; ; attempt++) {
+    let wait = waitMs(attempt);
     try {
       const res = await fetch(url, init);
-      if (res.status < 500 || attempt === 3) return res;
-      console.log(`${label}: ${res.status}, trying again (${attempt}/3)`);
+      const limited = res.status === 429 && !(await res.clone().text()).includes("insufficient_quota");
+      if ((res.status < 500 && !limited) || attempt === TRIES) return res;
+      if (limited) wait = Math.max(wait, retryAfterMs(res));
+      console.log(`${label}: ${res.status}${limited ? " (rate limited)" : ""}, trying again (${attempt}/${TRIES})`);
     } catch (e) {
-      if (attempt === 3) throw e;
-      console.log(`${label}: ${e.cause?.code || e.message}, trying again (${attempt}/3)`);
+      if (attempt === TRIES) throw e;
+      console.log(`${label}: ${e.cause?.code || e.message}, trying again (${attempt}/${TRIES})`);
     }
-    await new Promise((r) => setTimeout(r, 1500 * attempt));
+    await new Promise((r) => setTimeout(r, wait));
   }
+}
+
+// `fn` over `items`, at most `limit` at a time, in their order. After a
+// failure no new item starts and the running ones finish, so a clip already
+// paid for still reaches the disk; then the first error is thrown.
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  let failed = null;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const i = next++;
+      try {
+        out[i] = await fn(items[i], i);
+      } catch (e) {
+        failed ??= { e };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  if (failed) throw failed.e;
+  return out;
 }
 
 // video.json "pronounce" swaps a word for how the voice should say it (the
@@ -69,7 +111,7 @@ function speaker(pronounce = {}) {
 
 // `tempo` speeds a clip up after it is spoken (pitch kept), before its words
 // are timed, so the onsets match what plays.
-function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronounce, model = MODEL }) {
+function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronounce, model = MODEL, jobs = JOBS }) {
   const spoken = speaker(pronounce);
   // The TTS model sometimes swallows a short closing sentence; a clip has to
   // carry every word (in particular the last ones) or it is spoken again.
@@ -179,29 +221,28 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
     return fs.existsSync(stamp) && fs.existsSync(path.join(audioDir, `${line.id}.words.json`)) && fs.readFileSync(stamp, "utf8") === `${head}\n${style}\n${spoken(line.text)}`;
   }
 
-  // Every narration line as it will play: a spoken clip with its length and
-  // word onsets, or a silent pause. `dry` never calls the API;
-  // `cachedOnly` uses the clips on disk and fails where one is missing.
+  // Every narration line as it will play, in order: a spoken clip with its
+  // length and word onsets, or a silent pause. Lines are voiced `jobs` at a
+  // time; two lines with one id would share a clip's files, so they stop the
+  // run first. `dry` never calls the API; `cachedOnly` uses the clips on disk
+  // and fails where one is missing.
   async function prepare(narration, { dry = false, cachedOnly = false } = {}) {
-    const lines = [];
-    for (const line of narration) {
-      if (!line.text) {
-        lines.push({ ...line, ms: line.ms ?? SILENT_MS, silent: true });
-        continue;
-      }
+    const twice = narration.map((l) => l.id).filter((id, i, ids) => ids.indexOf(id) !== i);
+    if (twice.length) throw new Error(`narration id "${twice[0]}" is used twice; every line needs its own`);
+    return mapLimit(narration, jobs, async (line) => {
+      if (!line.text) return { ...line, ms: line.ms ?? SILENT_MS, silent: true };
       if (dry && !hasClip(line)) {
         const count = line.text.split(/\s+/).length;
-        lines.push({ ...line, ms: Math.round((count * 370) / tempo) + 500 });
-        continue;
+        return { ...line, ms: Math.round((count * 370) / tempo) + 500 };
       }
       const { wav, words: w, cached } = await speak(line, cachedOnly || dry);
-      lines.push({ ...line, wav, ms: durationMs(wav), words: w });
-      console.log(`audio ${line.id}: ${(lines.at(-1).ms / 1000).toFixed(2)}s${cached ? " (already spoken)" : ""}`);
-    }
-    return lines;
+      const ms = durationMs(wav);
+      console.log(`audio ${line.id}: ${(ms / 1000).toFixed(2)}s${cached ? " (already spoken)" : ""}`);
+      return { ...line, wav, ms, words: w };
+    });
   }
 
   return { prepare };
 }
 
-module.exports = { makeVoice, speaker, KEY_STEPS };
+module.exports = { makeVoice, speaker, mapLimit, post, KEY_STEPS };
