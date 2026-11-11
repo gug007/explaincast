@@ -46,6 +46,9 @@ function checkTarget(t, errors, dir) {
   if ((t.width || 0) > MAX_FRAME.w || (t.height || 0) > MAX_FRAME.h) errors.push(`the target is at most ${MAX_FRAME.w}x${MAX_FRAME.h} points, or it runs off the canvas`);
 }
 
+// Whether video.json "youtube" still holds new.js's placeholders.
+const youtubeTodo = (video) => /\bTODO\b/.test(JSON.stringify(video.youtube || {}));
+
 // `dir` (the video folder) checks the files video.json names.
 function checkVideo(video, beats, { dir = null } = {}) {
   const errors = [];
@@ -116,7 +119,7 @@ function checkVideo(video, beats, { dir = null } = {}) {
       warnings.push(`the last line should be silent ({ "id": "outro", "ms": 3200 }) with s.card(${JSON.stringify(video.brand)}, { hold: true })`);
     }
   }
-  if (/\bTODO\b/.test(JSON.stringify(video.youtube || {}))) warnings.push('video.json "youtube" still has TODO placeholders');
+  if (youtubeTodo(video)) warnings.push('video.json "youtube" still has TODO placeholders');
   for (const [id, edit] of Object.entries(video.zooms || {})) {
     const bad = Object.keys(edit).filter((k) => !["scale", "at", "ms", "drop"].includes(k));
     if (!/^[^#]+#\d+$/.test(id)) errors.push(`video.json zooms: "${id}" is not a zoom id (<line>#<n>, see the mux log)`);
@@ -158,4 +161,4 @@ function lintDir(dir) {
   return checkVideo(video, beats, { dir });
 }
 
-module.exports = { checkVideo, lintDir };
+module.exports = { checkVideo, lintDir, youtubeTodo };

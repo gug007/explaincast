@@ -12,7 +12,7 @@
 | `look` | A brand's look for the cards, the thumbnail and the canvas behind the window: `{ canvas, ink, font, logo, pools }`, every field optional. Without it, explaincast's own (warm canvas, serif, pools) for every audience, client videos included. `canvas` and `ink` are colours (`"#0e2a3c"`, `rgb()`, `hsl()`); `font` is a `.woff2`, `.woff`, `.ttf` or `.otf` file, or the name of a font installed on the Mac; `logo` is an `.svg`, `.png`, `.jpg` or `.webp` set above the words of a held card, the closing one; `pools` is `true`, `false` or one to three colours, and a brand's own `canvas` is flat unless it asks for them. Paths start at the video folder. `--mux-only` applies a change |
 | `hide` | Terms the checks flag on screen |
 | `pronounce` | `{ "nginx": "engine x" }`: how the voice says a word; captions keep the written one |
-| `heard` | `{ "sas": "sass" }`: how the transcript spells a word the voice says right |
+| `heard` | `{ "sas": "sass", "super base": "supabase" }`: how the transcript spells a word or phrase the voice says right. A voice NOTE in `qa/report.json` gives the entry to add |
 | `voice`, `style` | TTS voice (`marin`) and style prompt |
 | `music` | `true`, `false` or a file, overriding the audience |
 | `zooms` | Changes to recorded zooms, by the id the render log prints, applied with `--mux-only`: `{ "line#1": { scale, at, ms, drop } }` |

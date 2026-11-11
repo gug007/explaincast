@@ -15,7 +15,7 @@ const { DEFAULT_BED, RATE, soundtrack } = require("./mix");
 const { beginTake, failTake, promote, finishDryTake } = require("./takes");
 const { exitOnSignals, runTeardown, onTeardown } = require("./teardown");
 const { fitLines } = require("./fit");
-const { lintDir } = require("./lint");
+const { lintDir, youtubeTodo } = require("./lint");
 const { writeCaptions } = require("./captions");
 const { chapters, chaptersText, mmss } = require("./chapters");
 const { runQa } = require("./qa");
@@ -208,9 +208,11 @@ function writeYoutube(list) {
 
 // Captions, chapters and the thumbnail beside the MP4, then the checks.
 // `timeline` is the MP4's (edited when there is an edit), `taken` the take's.
+// What a public upload would trip on goes into the report with the rest.
 async function finish(lines, timeline, taken) {
   const srt = P.mp4.replace(/\.mp4$/, ".srt");
   console.log(`captions: ${writeCaptions(srt, timeline, lines)} -> ${srt}`);
+  const more = [];
   if (audience.chapters) {
     const spoken = Object.fromEntries(lines.filter((l) => l.words?.length).map((l) => [l.id, { last: l.words.at(-1).end * 1000 }]));
     const ch = chapters(timeline, video, spoken);
@@ -219,13 +221,15 @@ async function finish(lines, timeline, taken) {
       console.log(`chapters: ${ch.list.map((c) => c.name).join(" | ")}`);
     }
     if (audience.name === "public") {
-      for (const p of ch.problems) console.log(`  chapters: ${p}`);
+      if (ch.problems.length) more.push(...ch.problems.map((p) => ({ level: "WARN", check: "chapters", message: p })));
+      else more.push({ level: "OK", check: "chapters", message: `${ch.list.length} chapters from 0:00, each 10 s or more` });
       writeYoutube(ch.list);
     }
   }
+  if (audience.name === "public" && youtubeTodo(video)) more.push({ level: "WARN", check: "youtube", message: 'video.json "youtube" still has TODO placeholders, and youtube.txt carries them' });
   const opener = (timeline.cards || []).find((c) => c.first && !c.hold);
   const thumbnail = video.cover || (audience.thumbnail && opener) ? await makeThumbnail(path.join(DIR, "thumbnail.jpg"), opener?.title || video.title, taken) : null;
-  runQa({ dir: DIR, mp4: P.mp4, raw: P.raw, timeline, video, privacy: audience.privacy, lines, zooms: taken.zooms, thumbnail });
+  runQa({ dir: DIR, mp4: P.mp4, raw: P.raw, timeline, video, privacy: audience.privacy, lines, zooms: taken.zooms, thumbnail, more });
 }
 
 // thumbnail.jpg: video.json's "cover" as written, "card" for the opening

@@ -107,7 +107,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
       }
     }
     if (cachedOnly) {
-      throw new Error(`audio ${line.id}: the line has no clip for its current text; a re-cut never speaks (add --speak to speak it and check it still fits the take, or put the old text back)`);
+      throw new Error(`audio ${line.id}: the line has no clip for its current text; a re-cut never speaks. Run --speak-only to voice it, then --mux-only again, which checks the new clip still fits the take; or put the old text back`);
     }
     fs.rmSync(path.join(audioDir, `${line.id}.words.json`), { force: true });
     const res = await post("https://api.openai.com/v1/audio/speech", {

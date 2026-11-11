@@ -6,6 +6,7 @@
 // - dead air: pauses between lines longer than 2.5 s
 // - loudness and true peak of the finished MP4
 // - the transcript of every line against its script
+// - what the render found: chapters YouTube would reject, a "youtube" TODO
 // - qa/sheet.jpg, a frame of every line, card and push-in, to look over at a glance
 const fs = require("fs");
 const os = require("os");
@@ -17,7 +18,7 @@ const { MASTER } = require("./mix");
 const { helper } = require("./helpers");
 const { STILL_OUT } = require("./compose");
 const { mapTime } = require("./edit");
-const { alignWords } = require("./words");
+const { transcriptGaps } = require("./words");
 const { speaker } = require("./voice");
 
 const DEAD_AIR_MS = 2500;
@@ -161,16 +162,29 @@ function deadAir(timeline) {
   return checks.length ? checks : [{ level: "OK", check: "dead air", message: `no silence over ${DEAD_AIR_MS / 1000} s between lines` }];
 }
 
-// The voice can say a word that isn't written; the captions show the script
-// either way, so only the transcript gives it away.
+// The voice can skip or change a word; the captions show the script either
+// way, so only the transcript gives it away. Each place the two part shows
+// what was written against what was heard. A short run heard as other words
+// is a NOTE, since it is most likely a name the transcript spells its own way,
+// with the "heard" entry that settles it; a skipped or longer run is a WARN.
+const GAP_SAYS = {
+  skipped: { level: "WARN", what: "the voice skipped words, so the captions show words nobody says", todo: "Reword the line, then take again." },
+  differs: { level: "WARN", what: "the transcript differs from the script", todo: "The voice may have said something else: reword the line, then take again." },
+  spelling: { level: "NOTE", what: "heard as other words, most likely only spelled another way" },
+};
 function voiceCheck(lines, pronounce) {
   const say = speaker(pronounce);
   const checks = [];
   for (const line of lines) {
     if (!line.text || !line.words?.length) continue;
-    const { all, times } = alignWords(say(line.text), line.words);
-    const missed = all.filter((_, i) => times[i] == null);
-    if (missed.length) checks.push({ level: "WARN", check: "voice", message: `line "${line.id}": the transcript lacks "${missed.join(" ")}"; hear it, or reword the line` });
+    for (const g of transcriptGaps(say(line.text), line.words)) {
+      const { level, what, todo } = GAP_SAYS[g.kind];
+      const entry = g.entry && Object.entries(g.entry).map(([h, w]) => `{ ${JSON.stringify(h)}: ${JSON.stringify(w)} }`)[0];
+      const fix = entry
+        ? `If the two sound alike, add to video.json "heard": ${entry}. If they don't, the voice said it wrong: reword the line or add a "pronounce" entry, then take again.`
+        : todo;
+      checks.push({ level, check: "voice", message: `line "${line.id}": ${what}\n  wrote  ${g.wrote}\n  heard  ${g.heard}\n  ${fix}` });
+    }
   }
   return checks.length ? checks : [{ level: "OK", check: "voice", message: "every written word is in the transcript" }];
 }
@@ -218,8 +232,8 @@ function sheet(mp4, list, file) {
 // `raw` is the take's capture; on an edited cut its clock is the take's, not
 // the cut's. `privacy` is how a name on screen counts for this audience.
 // `thumbnail` (optional) says which picture became thumbnail.jpg and why, for
-// the report.
-function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], zooms, thumbnail, log = console.log }) {
+// the report; `more` holds checks made while rendering, such as the chapters.
+function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], zooms, thumbnail, more = [], log = console.log }) {
   const qaDir = path.join(path.dirname(mp4), "qa");
   fs.mkdirSync(qaDir, { recursive: true });
   const checks = [];
@@ -235,6 +249,7 @@ function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], z
   checks.push(...voiceCheck(lines, video.pronounce));
   checks.push(...deadAir(timeline));
   checks.push(...loudnessCheck(mp4));
+  checks.push(...more);
   const sheetFile = path.join(qaDir, "sheet.jpg");
   const tiles = sheet(mp4, moments(timeline, video, zooms), sheetFile);
   const report = {
@@ -249,9 +264,10 @@ function runQa({ dir, mp4, raw, timeline, video, privacy = "FAIL", lines = [], z
   fs.writeFileSync(path.join(qaDir, "report.json"), JSON.stringify(report, null, 2));
   const fails = checks.filter((c) => c.level === "FAIL");
   const warns = checks.filter((c) => c.level === "WARN");
-  log(`qa: ${fails.length} FAIL, ${warns.length} WARN -> ${path.join(qaDir, "report.json")}${tiles.length ? `, ${sheetFile}` : ""}`);
-  for (const c of [...fails, ...warns]) log(`  ${c.level} ${c.check}: ${c.message}`);
+  const notes = checks.filter((c) => c.level === "NOTE");
+  log(`qa: ${fails.length} FAIL, ${warns.length} WARN${notes.length ? `, ${notes.length} NOTE` : ""} -> ${path.join(qaDir, "report.json")}${tiles.length ? `, ${sheetFile}` : ""}`);
+  for (const c of [...fails, ...warns, ...notes]) log(`  ${c.level} ${c.check}: ${c.message}`);
   return report;
 }
 
-module.exports = { runQa, identity, readText, screenHits };
+module.exports = { runQa, identity, readText, screenHits, voiceCheck };

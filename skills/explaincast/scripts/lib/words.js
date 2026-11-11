@@ -12,25 +12,60 @@ function spell(n) {
   return [...spell(Math.floor(n / 1000)), "thousand", ...(n % 1000 ? spell(n % 1000) : [])];
 }
 
+// "eight" → "eighth": the last word of a spelled number, as an ordinal.
+const ORDINAL_OF = { one: "first", two: "second", three: "third", five: "fifth", eight: "eighth", nine: "ninth", twelve: "twelfth" };
+const ordinalOf = (w) => ORDINAL_OF[w] || (w.endsWith("y") ? `${w.slice(0, -1)}ieth` : `${w}th`);
+
 // Words as the transcript and the script both reduce to them: lowercase, no
 // punctuation or accents, and numbers spelled out, so "96%" in one and
 // "ninety-six percent" in the other are the same three words, and "всё" and
-// "все" (or "café" and "cafe") are the same word.
-const norm = (t) =>
+// "все" (or "café" and "cafe") are the same word. Every dot between digits
+// splits them, so a version reads as its parts ("3.2.7": three two seven), and
+// "5th" reads "fifth". A word spelled from digits keeps them (`digits`), and
+// the words of one written number share an `id` (prefixed by `group`).
+// Each word of the text reduces on its own, so the words of a text are those
+// of its words in turn (captions.js counts on that).
+const tokens = (t, group = "") =>
   t
     .toLowerCase()
     .replace(/%/g, " percent")
-    .replace(/(\d)\.(\d)/g, "$1 $2")
+    .replace(/(\d)\.(?=\d)/g, "$1 ")
     .normalize("NFD")
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/-/g, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .flatMap((w) => (/^\d{1,6}$/.test(w) ? spell(Number(w)) : [w]));
+    .flatMap((w, i) => {
+      const id = `${group}${i}`;
+      if (/^\d{1,6}$/.test(w)) return spell(Number(w)).map((x) => ({ w: x, digits: w, id }));
+      const ordinal = /^(\d{1,6})(?:st|nd|rd|th)$/.exec(w);
+      if (ordinal) return spell(Number(ordinal[1])).map((x, k, all) => ({ w: k === all.length - 1 ? ordinalOf(x) : x, digits: ordinal[1], id }));
+      if (/^\d+$/.test(w)) return [{ w, digits: w, id }];
+      return [{ w }];
+    });
 
-// How the transcript spells names the voice says right (video.json "heard").
+const norm = (t) => tokens(t).map((x) => x.w);
+
+// How the transcript spells what the voice says right (video.json "heard"): a
+// heard word for a written one ({ "sas": "sass" }), or either side a phrase
+// ({ "karucapatogac": "karutsa patoghits dot" }). Both sides reduce as words do.
 let HEARD_AS = {};
-const setHeard = (map = {}) => (HEARD_AS = Object.fromEntries(Object.entries(map).map(([k, v]) => [k.toLowerCase(), v.toLowerCase()])));
+let HEARD_PHRASES = [];
+function setHeard(map = {}) {
+  HEARD_AS = {};
+  HEARD_PHRASES = [];
+  for (const [k, v] of Object.entries(map)) {
+    const h = norm(k);
+    const w = norm(v);
+    if (!h.length || !w.length) continue;
+    if (h.length === 1 && w.length === 1) HEARD_AS[h[0]] = w[0];
+    else HEARD_PHRASES.push({ h, w });
+  }
+}
+
+// A "heard" phrase spoken at `k` that stands for the written words at `i`.
+const heardPhrase = (spoken, k, all, i) =>
+  HEARD_PHRASES.find(({ h, w }) => h.every((x, n) => spoken[k + n]?.n === x) && w.every((x, n) => all[i + n] === x));
 const SOUND_ALIKE = [["to", "too", "two"], ["for", "four"]];
 const same = (heard, word) =>
   heard === word ||
@@ -38,36 +73,201 @@ const same = (heard, word) =>
   SOUND_ALIKE.some((set) => set.includes(heard) && set.includes(word)) ||
   (heard.endsWith("s") && word.endsWith("s") && heard.length > 3 && HEARD_AS[heard.slice(0, -1)] === word.slice(0, -1));
 
-// Start time (ms) of each word of `text` in the clip, or null where the
-// transcript has no match for it.
-function alignWords(text, words) {
-  const all = norm(text);
+// What a number word is worth, cardinal or ordinal ("eighth" is an 8).
+const NUMBER_WORDS = new Map();
+for (const [i, w] of ONES.entries()) NUMBER_WORDS.set(w, { type: i === 0 ? "zero" : i < 10 ? "unit" : "teen", v: i });
+for (const [i, w] of TENS.entries()) if (w) NUMBER_WORDS.set(w, { type: "tens", v: i * 10 });
+NUMBER_WORDS.set("hundred", { type: "hundred", v: 100 });
+NUMBER_WORDS.set("thousand", { type: "scale", v: 1000 });
+NUMBER_WORDS.set("million", { type: "scale", v: 1e6 });
+for (const [w, k] of [...NUMBER_WORDS]) if (k.type !== "zero") NUMBER_WORDS.set(ordinalOf(w), { ...k, ord: true });
+
+// Whether a number word carries on the number so far: "twenty" then "six",
+// "fifteen" then "hundred", but not "three" then "two" (a version's parts) or
+// "twenty" then "twenty" (a year said in pairs).
+function joins(cur, k) {
+  if (cur.last === "a") return k?.type === "hundred" || k?.type === "scale";
+  if (!k || cur.last === "ord" || cur.last === "zero" || k.type === "zero") return false;
+  if (k.type === "unit") return ["tens", "hundred", "scale"].includes(cur.last);
+  if (k.type === "teen" || k.type === "tens") return ["hundred", "scale"].includes(cur.last);
+  if (k.type === "hundred") return cur.group > 0 && cur.group < 100;
+  return cur.group > 0;
+}
+
+// The numbers in a run of words (tokens()), by the index they start at:
+// { end, value, digits }. A number written in digits is one number; one in
+// words is read as people say it ("fifteen hundred", "two thousand twenty
+// six", "a hundred and five").
+function numbersIn(toks) {
+  const found = new Map();
+  let cur = null;
+  const close = (end) => {
+    if (cur) found.set(cur.start, { start: cur.start, end, value: cur.total + cur.group, digits: cur.digits || null });
+    cur = null;
+  };
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (cur?.id != null && t.id === cur.id) continue;
+    if (t.digits) {
+      close(i);
+      cur = { start: i, id: t.id, total: Number(t.digits), group: 0, digits: t.digits };
+      continue;
+    }
+    const next = toks[i + 1];
+    if (t.w === "a" && next && !next.digits && ["hundred", "scale"].includes(NUMBER_WORDS.get(next.w)?.type) && !NUMBER_WORDS.get(next.w).ord) {
+      close(i);
+      cur = { start: i, total: 0, group: 0, last: "a" };
+      continue;
+    }
+    if (t.w === "and" && cur && cur.id == null && (cur.last === "hundred" || cur.last === "scale") && next && !next.digits && joins(cur, NUMBER_WORDS.get(next.w))) continue;
+    const k = NUMBER_WORDS.get(t.w);
+    if (!k) {
+      close(i);
+      continue;
+    }
+    if (!cur || cur.id != null || !joins(cur, k)) {
+      close(i);
+      cur = { start: i, total: 0, group: 0, last: null };
+    }
+    if (k.type === "hundred") cur.group = (cur.group || 1) * 100;
+    else if (k.type === "scale") [cur.total, cur.group] = [cur.total + (cur.group || 1) * k.v, 0];
+    else cur.group += k.v;
+    cur.last = k.ord ? "ord" : k.type;
+    if (cur.last === "ord" || cur.last === "zero") close(i + 1);
+  }
+  close(toks.length);
+  return found;
+}
+
+// Where a spoken number starting at `k` and worth `value` ends, or null: the
+// same number however it is written ("1500", "fifteen hundred", "1,500"), a
+// cardinal for an ordinal ("Eighth," heard as "8"), or thousands the
+// transcript split at their commas ("1,500" heard as "1" "500").
+function numberEnd(value, nums, k) {
+  const s = nums.get(k);
+  if (!s) return null;
+  if (s.value === value) return s.end;
+  let { digits, end } = s;
+  for (let next = nums.get(end); digits && next?.digits?.length === 3; next = nums.get(end)) {
+    digits += next.digits;
+    end = next.end;
+    if (Number(digits) === value) return end;
+  }
+  return null;
+}
+
+// The words of a transcript, each with its onset. Whisper keeps the "%" of a
+// number such as "75%" as an empty word after it; that word is the "percent".
+function spokenWords(words = []) {
   const spoken = [];
-  for (const w of words || []) for (const n of norm(w.word)) spoken.push({ n, ms: w.start * 1000 });
+  let afterNumber = false;
+  for (const [i, w] of words.entries()) {
+    const parts = tokens(w.word || "", `${i}:`);
+    if (!parts.length && afterNumber && !(w.word || "").trim()) parts.push({ w: "percent" });
+    for (const p of parts) spoken.push({ ...p, n: p.w, ms: w.start * 1000, src: i });
+    afterNumber = parts.length > 0 && parts.at(-1).digits != null;
+  }
+  return spoken;
+}
+
+// Start time (ms) of each word of `text` in the clip, or null where the
+// transcript has no match for it. A number is matched whole, by its value, so
+// the way the transcript writes it doesn't matter; every word of it gets a
+// time from the spoken number, in step where the two have as many words.
+// `heardAt` holds the spoken words [from, to) each matched word took.
+function alignWords(text, words) {
+  const script = tokens(text);
+  const all = script.map((t) => t.w);
+  const spoken = spokenWords(words || []);
+  const written = numbersIn(script);
+  const said = numbersIn(spoken);
   const times = new Array(all.length).fill(null);
+  const heardAt = new Array(all.length).fill(null);
+  const match = (from, to, k, end, msOf = () => spoken[k].ms) => {
+    for (let x = from; x < to; x++) [times[x], heardAt[x]] = [msOf(x), [k, end]];
+  };
   let j = 0;
   for (let i = 0; i < all.length; i++) {
+    const num = written.get(i);
     for (let k = j; k < Math.min(spoken.length, j + 4); k++) {
+      const end = num && numberEnd(num.value, said, k);
+      if (end) {
+        match(num.start, num.end, k, end, (x) => spoken[Math.min(k + (x - num.start), end - 1)].ms);
+        j = end;
+        i = num.end - 1;
+        break;
+      }
+      const phrase = heardPhrase(spoken, k, all, i);
+      if (phrase) {
+        match(i, i + phrase.w.length, k, k + phrase.h.length);
+        j = k + phrase.h.length;
+        i += phrase.w.length - 1;
+        break;
+      }
       if (same(spoken[k].n, all[i])) {
-        times[i] = spoken[k].ms;
+        match(i, i + 1, k, k + 1);
         j = k + 1;
         break;
       }
       if (i + 1 < all.length && spoken[k].n === all[i] + all[i + 1]) {
-        times[i] = spoken[k].ms;
-        times[i + 1] = spoken[k].ms;
+        match(i, i + 2, k, k + 1);
         i += 1;
         j = k + 1;
         break;
       }
       if (k + 1 < spoken.length && spoken[k].n + spoken[k + 1].n === all[i]) {
-        times[i] = spoken[k].ms;
+        match(i, i + 1, k, k + 2);
         j = k + 2;
         break;
       }
     }
   }
-  return { all, times };
+  return { all, times, spoken, heardAt };
+}
+
+// Up to a few words either side of words [a, b] of `list`, the run itself in
+// brackets: "…apartment on [Karutsa-patoghits dot] am…". An empty run (a > b)
+// shows as "[ ]" before word a.
+const CONTEXT = 3;
+function inContext(list, a, b) {
+  const lo = Math.max(0, a - CONTEXT);
+  const hi = Math.min(list.length, b + 1 + CONTEXT);
+  const run = a > b ? " " : list.slice(a, b + 1).join(" ");
+  return [lo > 0 ? "…" : "", [...list.slice(lo, a), `[${run}]`, ...list.slice(b + 1, hi)].join(" "), hi < list.length ? "…" : ""].join("");
+}
+
+// The written words the transcript has no match for, in runs, each set
+// against what was heard between its matched neighbours. Nothing heard there
+// means the voice skipped the run ("skipped"). A short run heard as a few
+// other words is most likely a name the transcript spells its own way
+// ("spelling"), and `heard` is the video.json entry that matches it; anything
+// longer may be the voice saying something else ("differs").
+function transcriptGaps(text, words = []) {
+  const { all, times, spoken, heardAt } = alignWords(text, words);
+  const written = text.split(/\s+/).filter(Boolean);
+  const wordOf = written.flatMap((w, n) => norm(w).map(() => n));
+  const said = words.map((w) => (w.word || "").trim());
+  const gaps = [];
+  for (let i = 0; i < all.length; i++) {
+    if (times[i] != null) continue;
+    let end = i;
+    while (end + 1 < all.length && times[end + 1] == null) end++;
+    const from = i > 0 ? heardAt[i - 1][1] : 0;
+    const to = end + 1 < all.length ? heardAt[end + 1][0] : spoken.length;
+    const wrote = all.slice(i, end + 1);
+    const heard = spoken.slice(from, to).map((s) => s.n);
+    const at = from < spoken.length ? spoken[from].src : said.length;
+    const [ha, hb] = heard.length ? [spoken[from].src, spoken[to - 1].src] : [at, at - 1];
+    const kind = !heard.length ? "skipped" : heard.length <= 3 && wrote.length <= 4 ? "spelling" : "differs";
+    gaps.push({
+      kind,
+      wrote: inContext(written, wordOf[i], wordOf[end]),
+      heard: inContext(said, ha, hb),
+      ...(kind === "spelling" && { entry: { [heard.join(" ")]: wrote.join(" ") } }),
+    });
+    i = end;
+  }
+  return gaps;
 }
 
 // An onset for every word of `text`; a word the transcript missed is placed
@@ -178,4 +378,4 @@ class Timing {
   }
 }
 
-module.exports = { sleep, norm, alignWords, onsets, findPhrase, setHeard, Timing };
+module.exports = { sleep, norm, alignWords, transcriptGaps, onsets, findPhrase, setHeard, Timing };
