@@ -1,11 +1,12 @@
-// The finished picture, built at mux time: the raw capture gets rounded corners and sits on the cards' warm canvas with a soft
+// The finished picture, built at mux time: the raw capture gets rounded corners and sits on the cards' canvas with a soft
 // shadow; zoom keyframes ease the picture in on small targets and back out; the
 // cards fade in over everything where the timeline says, and while one is up
 // the window stands at its right, the way the cover shows it (COVER).
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { CARD_FADE_MS, OPEN_LIFT, POOLS, POOLS_AT_REST } = require("./overlay");
+const { CARD_FADE_MS, OPEN_LIFT, POOLS_AT_REST } = require("./overlay");
+const { DEFAULT_LOOK } = require("./look");
 const { track, toFrames } = require("./keyframes");
 
 const FPS = 30;
@@ -24,19 +25,19 @@ function frameBox(out, frame, zoom) {
 // window reads first.
 const POOL_OPACITY = 0.5;
 
-// The canvas with its pools (canvas.png), the window's shadow alone on
-// transparency (shadow.png, so it can move with the window) and the box's
-// rounded alpha (mask.png), drawn once by Chromium from the same CSS the demo
-// stage uses. The file names carry the look, so a changed look never reuses a
-// stale drawing.
-async function frameAssets(dir, { out, frame, box }) {
+// The canvas in the video's look (look.js), with its pools when it has them
+// (canvas.png), the window's shadow alone on transparency (shadow.png, so it
+// can move with the window) and the box's rounded alpha (mask.png), drawn once
+// by Chromium from the same CSS the demo stage uses. The file names carry the
+// look, so a changed look never reuses a stale drawing.
+async function frameAssets(dir, { out, frame, box, look = DEFAULT_LOOK }) {
   fs.mkdirSync(dir, { recursive: true });
-  const look = crypto
+  const drawn = crypto
     .createHash("sha1")
-    .update(JSON.stringify([frame.canvas, POOLS, POOLS_AT_REST, POOL_OPACITY, frame.radius, frame.zoom, out, box]))
+    .update(JSON.stringify([look.canvas, look.pools, POOLS_AT_REST, POOL_OPACITY, frame.radius, frame.zoom, out, box]))
     .digest("hex")
     .slice(0, 10);
-  const file = (kind) => path.join(dir, `${kind}-${box.w}x${box.h}-${look}.png`);
+  const file = (kind) => path.join(dir, `${kind}-${box.w}x${box.h}-${drawn}.png`);
   const assets = { canvas: file("canvas"), shadow: file("shadow"), mask: file("mask") };
   if (Object.values(assets).every((f) => fs.existsSync(f))) return assets;
   const { chromium, CHROME } = require("./browser");
@@ -45,9 +46,9 @@ async function frameAssets(dir, { out, frame, box }) {
   const shadow = `0 0 0 ${frame.zoom}px rgba(0,0,0,.10), 0 ${24 * frame.zoom}px ${70 * frame.zoom}px ${-18 * frame.zoom}px rgba(0,0,0,.45), 0 ${6 * frame.zoom}px ${18 * frame.zoom}px ${-8 * frame.zoom}px rgba(0,0,0,.25)`;
   const radius = frame.radius * frame.zoom;
   await page.setContent(`<!doctype html><style>
-html, body { margin: 0; background: ${frame.canvas}; width: ${out.width}px; height: ${out.height}px; overflow: hidden; }
-#pools { position: absolute; inset: -20%; filter: blur(60px); background: ${POOLS}; transform: ${POOLS_AT_REST}; opacity: ${POOL_OPACITY}; }
-</style><div id="pools"></div>`);
+html, body { margin: 0; background: ${look.canvas}; width: ${out.width}px; height: ${out.height}px; overflow: hidden; }
+#pools { position: absolute; inset: -20%; filter: blur(60px); background: ${look.pools}; transform: ${POOLS_AT_REST}; opacity: ${POOL_OPACITY}; }
+</style>${look.pools ? '<div id="pools"></div>' : ""}`);
   await page.screenshot({ path: assets.canvas });
   // An outer box-shadow is never painted under its own box, so a transparent
   // box leaves the shadow ring alone.

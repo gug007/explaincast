@@ -3,13 +3,15 @@
 const crypto = require("crypto");
 const path = require("path");
 const { sleep } = require("./words");
-const { CANVAS, OVERLAY_CSS, CURSOR_SVG, HOTSPOT, OPEN_LIFT, installStage } = require("./overlay");
+const { overlayCss, CURSOR_SVG, HOTSPOT, OPEN_LIFT, installStage } = require("./overlay");
+const { DEFAULT_LOOK } = require("./look");
 const { Recorder } = require("./recorder");
 const { chromium, CHROME } = require("./browser");
 
-const CARD_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
-html, body { margin: 0; background: ${CANVAS}; overflow: hidden; }
-${OVERLAY_CSS}
+// The card page in a look's colours and face (look.js).
+const cardHtml = (look) => `<!doctype html><html><head><meta charset="utf-8"><style>
+html, body { margin: 0; background: ${look.canvas}; overflow: hidden; }
+${look.fontFace}${overlayCss(look)}
 </style></head><body></body></html>`;
 
 // Changes whenever the card's look or its hand-over does, so a re-cut renders
@@ -18,19 +20,28 @@ ${OVERLAY_CSS}
 // at their right (compose.js COVER).
 const APP_LAYOUT = "cover";
 
-const CARD_LOOK = crypto
-  .createHash("sha1")
-  .update(CARD_HTML + installStage.toString() + JSON.stringify(OPEN_LIFT) + APP_LAYOUT)
-  .digest("hex")
-  .slice(0, 12);
+const cardLook = (look = DEFAULT_LOOK) =>
+  crypto
+    .createHash("sha1")
+    .update(cardHtml(look) + installStage.toString() + JSON.stringify(OPEN_LIFT) + APP_LAYOUT + look.key)
+    .digest("hex")
+    .slice(0, 12);
 
-async function renderCards(cards, dir, size, { layout } = {}) {
+// The page with the stage in it, ready for a card: the face loaded and the
+// logo decoded first, so both are there on the card's first frame.
+async function cardPage(page, look) {
+  await page.setContent(cardHtml(look));
+  await page.evaluate(installStage, { cursorSvg: CURSOR_SVG, hotspot: HOTSPOT, logo: look.logo });
+  await page.evaluate((font) => Promise.all([document.fonts.load(`600 150px ${font}`).catch(() => {}), window.__lc.logoReady()]), look.font);
+}
+
+// A held card (the closing one) carries the look's logo.
+async function renderCards(cards, dir, size, { layout, look = DEFAULT_LOOK } = {}) {
   if (!cards.length) return [];
   const browser = await chromium.launch({ executablePath: CHROME, headless: true });
   const context = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
   const page = await context.newPage();
-  await page.setContent(CARD_HTML);
-  await page.evaluate(installStage, { cursorSvg: CURSOR_SVG, hotspot: HOTSPOT });
+  await cardPage(page, look);
   if (layout) await page.evaluate((cls) => document.getElementById("explaincast-card").classList.add(cls), layout);
   const files = [];
   for (const [i, card] of cards.entries()) {
@@ -54,7 +65,7 @@ async function renderCards(cards, dir, size, { layout } = {}) {
     const lifts = card.first && !card.hold;
     const length = lead + card.ms + (lifts ? OPEN_LIFT.fadeMs - OPEN_LIFT.leadMs : 0);
     if (lead > 0) await sleep(Math.max(0, t0 + lead - Date.now()));
-    page.evaluate(({ t, ms }) => window.__lc.card(t, ms, true), { t: card.title, ms: card.ms + 2000 }).catch(() => {});
+    page.evaluate(({ t, ms, logo }) => window.__lc.card(t, ms, true, logo), { t: card.title, ms: card.ms + 2000, logo: !!card.hold }).catch(() => {});
     if (lifts) {
       await sleep(Math.max(0, t0 + lead + card.ms - OPEN_LIFT.titleLeadMs - Date.now()));
       await page.evaluate((ms) => window.__lc.lift(ms), OPEN_LIFT.titleMs);
@@ -72,13 +83,12 @@ async function renderCards(cards, dir, size, { layout } = {}) {
 // The YouTube thumbnail: the opening card itself, drawn still once its words
 // have settled, instead of a frame grabbed from the video (the words now lift
 // away before the card ends, and a short opener leaves few clean frames).
-async function renderThumbnail(title, file, size) {
+async function renderThumbnail(title, file, size, look = DEFAULT_LOOK) {
   const { execFileSync } = require("child_process");
   const browser = await chromium.launch({ executablePath: CHROME, headless: true });
   try {
     const page = await browser.newPage({ viewport: size, deviceScaleFactor: 1 });
-    await page.setContent(CARD_HTML);
-    await page.evaluate(installStage, { cursorSvg: CURSOR_SVG, hotspot: HOTSPOT });
+    await cardPage(page, look);
     await page.evaluate(() => window.__lc.cover());
     page.evaluate(({ t }) => window.__lc.card(t, 60000, true), { t: title }).catch(() => {});
     const words = title.split(/\s+/).length;
@@ -92,4 +102,4 @@ async function renderThumbnail(title, file, size) {
   }
 }
 
-module.exports = { renderCards, renderThumbnail, CARD_LOOK, APP_LAYOUT };
+module.exports = { renderCards, renderThumbnail, cardLook, APP_LAYOUT };

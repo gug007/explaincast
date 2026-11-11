@@ -1,5 +1,5 @@
 // The cover when video.json has a "cover": the cards' canvas and
-// serif, a few big words, and the window at a moment of the take.
+// face (look.js), a few big words, and the window at a moment of the take.
 // "window" sets the words left and the window right, running off the edge;
 // "closeup" fills everything under a band of canvas with the crop, big.
 // Without a "cover", coverpick.js picks the moment and this draws it as a
@@ -7,28 +7,28 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const { CANVAS, POOLS, POOLS_AT_REST } = require("./overlay");
+const { POOLS_AT_REST } = require("./overlay");
+const { DEFAULT_LOOK } = require("./look");
 
-const SERIF = `"Iowan Old Style", "Palatino", Georgia, serif`;
 // The tallest the words may set, by style: the window cover's column keeps
 // 128 px clear above and below, the closeup's words stay inside their band.
 const WORDS_MAX_H = { window: 1184, closeup: 340 };
 
-const canvasCss = `
+const canvasCss = (look) => `${look.fontFace}
   html, body { margin: 0; width: 2560px; height: 1440px; overflow: hidden; }
-  body { position: relative; background: ${CANVAS}; font-family: ${SERIF}; color: #141414; }
-  .pools { position: absolute; inset: -20%; filter: blur(60px); background: ${POOLS}; transform: ${POOLS_AT_REST}; }
+  body { position: relative; background: ${look.canvas}; font-family: ${look.font}; color: ${look.ink}; }
+  .pools { position: absolute; inset: -20%; filter: blur(60px); background: ${look.pools || "none"}; transform: ${POOLS_AT_REST}; }
   .words { position: absolute; font-weight: 600; letter-spacing: -0.025em; line-height: 1.02; text-wrap: balance; }
   .shot { position: absolute; overflow: hidden; }
   .shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
 `;
 
-function layout(style, words, img, aspect) {
+function layout(style, words, img, aspect, look = DEFAULT_LOOK) {
   if (style === "closeup") {
-    return `<style>${canvasCss}
+    return `<style>${canvasCss(look)}
       body { background: #1b1b1b; }
       .shot { left: 0; top: 536px; width: 2560px; height: 904px; }
-      .band { position: absolute; left: 0; top: 0; width: 2560px; height: 500px; overflow: hidden; background: ${CANVAS}; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
+      .band { position: absolute; left: 0; top: 0; width: 2560px; height: 500px; overflow: hidden; background: ${look.canvas}; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
       .words { left: 0; top: 100px; width: 2560px; box-sizing: border-box; padding: 0 128px; text-align: center; font-size: 264px; }
     </style>
     <div class="shot"><img src="${img}"></div>
@@ -37,7 +37,7 @@ function layout(style, words, img, aspect) {
   }
   const w = 1580;
   const h = Math.round(w / aspect);
-  return `<style>${canvasCss}
+  return `<style>${canvasCss(look)}
     .words { left: 128px; top: 50%; transform: translateY(-50%); width: 900px; font-size: 208px; }
     .shot { left: 1080px; top: ${720 - h / 2}px; width: ${w}px; height: ${h}px; border-radius: 36px; background: #1b1b1b; box-shadow: 0 0 0 2px rgba(0,0,0,.14), 0 80px 180px -40px rgba(0,0,0,.55), 0 20px 52px -20px rgba(0,0,0,.35); }
   </style>
@@ -62,7 +62,7 @@ const escape = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/
 // is found in take time); `frame` is the window's size in points. A
 // cover's `image` (a picture in the video folder, made outside the take) is
 // the thumbnail as it is.
-async function renderCover({ cover, raw, timeline, frame, file, captureIn }) {
+async function renderCover({ cover, raw, timeline, frame, file, captureIn, look = DEFAULT_LOOK }) {
   if (cover.image) {
     execFileSync("ffmpeg", ["-v", "error", "-y", "-i", path.resolve(path.dirname(file), cover.image), "-vf", "scale=1280:720:flags=lanczos", "-q:v", "2", file]);
     return;
@@ -81,13 +81,13 @@ async function renderCover({ cover, raw, timeline, frame, file, captureIn }) {
     const crop = [w, h, x, y].map((v) => Math.round(v * k)).join(":");
     execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", at.toFixed(3), "-i", raw, "-frames:v", "1", "-vf", `scale=${captureIn},crop=${crop}`, shot]);
     const page = path.join(work, "cover.html");
-    fs.writeFileSync(page, `<!doctype html><meta charset="utf-8">${layout(style, escape(cover.words), "shot.png", w / h)}`);
+    fs.writeFileSync(page, `<!doctype html><meta charset="utf-8">${layout(style, escape(cover.words), "shot.png", w / h, look)}`);
     const { chromium, CHROME } = require("./browser");
     const browser = await chromium.launch({ executablePath: CHROME, headless: true });
     try {
       const tab = await browser.newPage({ viewport: { width: 2560, height: 1440 }, deviceScaleFactor: 1 });
       await tab.goto(`file://${page}`, { waitUntil: "load" });
-      await tab.evaluate(() => document.fonts.ready);
+      await tab.evaluate((font) => document.fonts.load(`600 208px ${font}`).then(() => document.fonts.ready), look.font);
       await tab.evaluate(fitWords, WORDS_MAX_H[style] || WORDS_MAX_H.window);
       await tab.screenshot({ path: path.join(work, "cover.png") });
     } finally {

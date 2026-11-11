@@ -2,21 +2,37 @@
 // new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me]
 //        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]
 // Starts ~/Movies/explaincast/<slug>/ (EXPLAINCAST_DIR) with video.json and
-// beats.js. The nearest .explaincast.json up from the current folder supplies
-// the project's defaults: target, for, brand, hide, pronounce, heard, voice, style.
+// beats.js, and for an idea a starter page with the Map kit beside it in idea/.
+// The nearest .explaincast.json up from the current folder supplies the
+// project's defaults: target, for, brand, look, hide, pronounce, heard, voice,
+// style.
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { parseArgs } = require("util");
 const { AUDIENCES } = require("./lib/audience");
+const { isFontFile } = require("./lib/look");
 
 const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]';
-const DEFAULT_KEYS = ["target", "for", "brand", "hide", "pronounce", "heard", "voice", "style"];
+const DEFAULT_KEYS = ["target", "for", "brand", "look", "hide", "pronounce", "heard", "voice", "style"];
 const MAX_SLUG = 60;
+const KIT = path.join(__dirname, "..", "idea");
+const KIT_FILES = ["stage.css", "stage.js", "LICENSE-lucide.txt"];
 
 function fail(message) {
   console.error(message);
   process.exit(2);
+}
+
+// The look's font and logo are named from the project's folder, and the video
+// folder is elsewhere, so they are written into video.json as absolute paths.
+function lookFrom(look, dir) {
+  if (!look || typeof look !== "object" || Array.isArray(look)) return look;
+  const files = { ...look };
+  const local = (v) => typeof v === "string" && v.trim() && !path.isAbsolute(v);
+  if (local(files.font) && isFontFile(files.font)) files.font = path.resolve(dir, files.font);
+  if (local(files.logo)) files.logo = path.resolve(dir, files.logo);
+  return files;
 }
 
 function projectDefaults(from = process.cwd()) {
@@ -25,7 +41,9 @@ function projectDefaults(from = process.cwd()) {
     if (fs.existsSync(file)) {
       const all = JSON.parse(fs.readFileSync(file, "utf8"));
       console.log(`defaults from ${file}`);
-      return Object.fromEntries(DEFAULT_KEYS.filter((k) => k in all).map((k) => [k, all[k]]));
+      const picked = Object.fromEntries(DEFAULT_KEYS.filter((k) => k in all).map((k) => [k, all[k]]));
+      if (picked.look) picked.look = lookFrom(picked.look, dir);
+      return picked;
     }
     if (dir === path.dirname(dir)) return {};
   }
@@ -44,7 +62,7 @@ const { values: o, positionals } = parseArgs({
 const title = positionals[0];
 if (!title) fail(USAGE);
 const defaults = projectDefaults();
-const target = o.url ? { type: "web", url: o.url } : o.file ? { type: "web", file: o.file } : o.app ? { type: "window", app: o.app } : defaults.target;
+const target = o.url ? { type: "web", url: o.url } : o.file ? { type: "web", file: o.file, cursor: false } : o.app ? { type: "window", app: o.app } : defaults.target;
 if (!target) fail(`what does the video show?\n${USAGE}`);
 const audience = o.for || defaults.for || "public";
 if (!AUDIENCES[audience]) fail(`--for is ${Object.keys(AUDIENCES).join(", ")}`);
@@ -73,10 +91,11 @@ const video = {
 };
 const beat = (id, body) => `  async ${id}(s) {\n    ${body}\n  },\n`;
 const beats = [
-  `// ${title}. Every call a beat can make: the skill's reference/beats.md.\n`,
+  `// ${title}. Every call a beat can make: the skill's reference/beats.md${idea ? "; the page's: reference/idea-pages.md" : ""}.\n`,
+  ...(idea ? ["// go() runs a step of the page; the take checks the page itself at the end of every line.\nconst go = (s, step) => s.page.evaluate((k) => window.go(k), step);\n"] : []),
   "module.exports = {\n",
   ...(cards ? [beat("title", `await s.card(${JSON.stringify(o.card || title)});`)] : []),
-  beat("first", idea ? 'await s.at("TODO word");\n    await s.page.evaluate(() => {});' : 'await s.click("TODO selector", { cue: "TODO word" });'),
+  beat("first", idea ? 'await s.at("TODO word");\n    await go(s, "first");' : 'await s.click("TODO selector", { cue: "TODO word" });'),
   ...(cards ? [beat("wrap", "await s.hold(0);")] : []),
   ...(cards && brand ? [beat("outro", `await s.card(${JSON.stringify(brand)}, { hold: true });`)] : []),
   "};\n",
@@ -85,4 +104,14 @@ const beats = [
 fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, "video.json"), `${JSON.stringify(video, null, 2)}\n`);
 fs.writeFileSync(path.join(dir, "beats.js"), beats);
+// A page that is already there is the user's: only a new one gets the starter and the kit.
+const page = idea && path.resolve(dir, target.file);
+if (page && !fs.existsSync(page)) {
+  const kit = path.join(path.dirname(page), "idea");
+  fs.mkdirSync(kit, { recursive: true });
+  for (const f of KIT_FILES) fs.copyFileSync(path.join(KIT, f), path.join(kit, f));
+  const html = fs.readFileSync(path.join(KIT, "page.html"), "utf8").replaceAll("{{title}}", title.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]));
+  fs.writeFileSync(page, html);
+  console.log(`page ${page}: a starter Map page; build on it (reference/idea-pages.md)`);
+}
 console.log(dir);

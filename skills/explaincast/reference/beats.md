@@ -9,6 +9,7 @@
 | `target` | `{ type: "web", url \| file, cursor, colorScheme }` or `{ type: "window", app \| launch }`; both take `width`, `height` (default 1100×620 points, at most 1200×680). `file` is relative to the folder. `cursor: false` hides the drawn pointer. `launch` is `[command, ...args]`: a copy of its own, ended after the take, where `app` uses the running app's largest window |
 | `narration` | `[{ id, text, chapter? }]`, one beat per id, in order. A line without `text` is a silent pause of `ms`. `chapter` names a chapter from that line on |
 | `brand` | The closing card's words; the end is `{ "id": "outro", "ms": 3200 }` with `s.card(brand, { hold: true })` |
+| `look` | A brand's look for the cards, the thumbnail and the canvas behind the window: `{ canvas, ink, font, logo, pools }`, every field optional. Without it, explaincast's own (warm canvas, serif, pools) for every audience, client videos included. `canvas` and `ink` are colours (`"#0e2a3c"`, `rgb()`, `hsl()`); `font` is a `.woff2`, `.woff`, `.ttf` or `.otf` file, or the name of a font installed on the Mac; `logo` is an `.svg`, `.png`, `.jpg` or `.webp` set above the words of a held card, the closing one; `pools` is `true`, `false` or one to three colours, and a brand's own `canvas` is flat unless it asks for them. Paths start at the video folder. `--mux-only` applies a change |
 | `hide` | Terms the checks flag on screen |
 | `pronounce` | `{ "nginx": "engine x" }`: how the voice says a word; captions keep the written one |
 | `heard` | `{ "sas": "sass" }`: how the transcript spells a word the voice says right |
@@ -48,12 +49,12 @@ Web only: `s.page` is the Playwright page and `s.scrollTo(sel)` scrolls on camer
 
 ## Idea pages
 
-Build the page with its states ahead of time, expose a function per step, and call each on its word. Set `"cursor": false`.
+`new.js --file page.html` writes a starter page in the Map style, with its kit in `idea/`, and a beats.js whose `go()` runs a step of the page. Each beat calls a step on its word, and the take checks the page itself at the end of every line. [idea-pages.md](idea-pages.md) has the look, the markup and every `stage` call.
 
 ```js
 async edge(s) {
   await s.at("next door");
-  await s.page.evaluate(() => show("edge"));
+  await go(s, "edge");
 },
 ```
 

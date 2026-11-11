@@ -84,7 +84,7 @@ To change something, ask the agent. It records again and voices only the lines y
 | You want a video of | Flag | What happens |
 | --- | --- | --- |
 | A website or web app | `--url <url>` | Runs headless, so you can keep using your Mac |
-| An idea, architecture or process | `--file <page.html>` | The agent draws a page and drives it, also headless |
+| An idea, architecture or process | `--file page.html` | The agent draws it as one map of the parts, with the data moving between them, and drives it, also headless |
 | A desktop app, terminal or editor | `--app "<name>"` | Experimental. Takes over your real pointer and keyboard, so leave the Mac alone. Needs `brew install cliclick` and Screen Recording and Accessibility permissions |
 
 To choose for yourself, add a flag from these tables, as in `/explaincast How checkout works --url http://localhost:3000 --for client`. In Claude Code, if another skill is also called `explaincast`, use the full name, `/explaincast:explaincast`.
@@ -96,6 +96,17 @@ Pick who it is for with `--for`:
 | `public` (default) | Yes | Yes | Chapter list, thumbnail, `youtube.txt` |
 | `client` | Yes | No | Chapter list |
 | `me` | No | No | Tighter pacing |
+
+Every video, client ones included, uses explaincast's own look by default: a warm canvas and a serif title. That is fine for client work as it is. To use a client's brand instead, add a `look` to `.explaincast.json` at the project's root (or to one video's `video.json`):
+
+```json
+{
+  "for": "client",
+  "look": { "canvas": "#0e2a3c", "ink": "#ffffff", "font": "brand/Sans-Bold.woff2", "logo": "brand/logo.svg" }
+}
+```
+
+`canvas` and `ink` set the cards' background and words, `font` takes a font file or the name of an installed font, and `logo` goes on the closing card. Every field is optional, so you can change only the colours. The full list is in [reference/beats.md](skills/explaincast/reference/beats.md).
 
 ## Good to know
 
@@ -109,7 +120,7 @@ Pick who it is for with `--for`:
 node --test test/*.test.js
 ```
 
-Every `video.json` field and beat call is in [reference/beats.md](skills/explaincast/reference/beats.md).
+Every `video.json` field and beat call is in [reference/beats.md](skills/explaincast/reference/beats.md), and the idea-page kit in [reference/idea-pages.md](skills/explaincast/reference/idea-pages.md).
 
 ## License
 

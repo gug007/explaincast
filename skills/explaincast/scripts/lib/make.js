@@ -8,7 +8,7 @@ const { spawnSync } = require("child_process");
 const { parseCli, videoDir } = require("./cli");
 const { OUT, ZOOM, frameFor } = require("./layout");
 const { recordTake, renderTimelineCards, GAP_MS, LEAD_MS, TAIL_MS } = require("./record");
-const { CARD_LOOK, renderThumbnail } = require("./cards");
+const { cardLook, renderThumbnail } = require("./cards");
 const { videoGraph, frameAssets, frameBox, editZooms, CAPTURE_IN, SCREENCAST_IN } = require("./compose");
 const { makeVoice } = require("./voice");
 const { DEFAULT_BED, RATE, soundtrack } = require("./mix");
@@ -23,6 +23,7 @@ const { planEdit, renderEdit } = require("./edit");
 const { renderCover } = require("./cover");
 const { chooseCover } = require("./coverpick");
 const { audienceOf } = require("./audience");
+const { lookOf } = require("./look");
 const { setHeard } = require("./words");
 
 const ROOT = process.env.EXPLAINCAST_DIR || path.join(os.homedir(), "Movies/explaincast");
@@ -57,6 +58,9 @@ const music = wantsMusic === false ? null : typeof wantsMusic === "string" ? pat
 const voice = makeVoice({ audioDir, voice: VOICE, style: TTS_STYLE, respeak: !!o.respeak, pronounce: video.pronounce });
 const frame = frameFor(video);
 const captureIn = video.target.type === "web" ? SCREENCAST_IN : CAPTURE_IN;
+// The cards', thumbnail's and canvas's look: explaincast's own, or video.json
+// "look" (look.js). Read when the render starts, so --mux-only applies a change.
+let look;
 // What moves with a take when a newer one replaces it.
 const MEDIA = ["record.mkv", "timeline.json", `${slug}.mp4`, `${slug}.srt`, "chapters.txt", "youtube.txt", "cards", "qa"];
 // The current take and its render.
@@ -94,10 +98,11 @@ async function record(lines) {
 // are gone or the card's look has changed since).
 async function ensureCards() {
   const timeline = JSON.parse(fs.readFileSync(P.timeline, "utf8"));
-  const have = timeline.cardLook === CARD_LOOK && timeline.cardFiles?.length === (timeline.cards || []).length && timeline.cardFiles.every((f) => fs.existsSync(f));
+  const want = cardLook(look);
+  const have = timeline.cardLook === want && timeline.cardFiles?.length === (timeline.cards || []).length && timeline.cardFiles.every((f) => fs.existsSync(f));
   if (have) return;
-  timeline.cardFiles = await renderTimelineCards(timeline, DIR);
-  timeline.cardLook = CARD_LOOK;
+  timeline.cardFiles = await renderTimelineCards(timeline, DIR, look);
+  timeline.cardLook = want;
   fs.writeFileSync(P.timeline, JSON.stringify(timeline, null, 2));
   console.log(`cards: ${timeline.cardFiles.length} clip(s)`);
 }
@@ -122,7 +127,7 @@ async function mux(lines, { file, crf = 18, audio = true }) {
   const zooms = editZooms(timeline.zooms || [], video.zooms, (m) => console.log(m));
   if (zooms.some((z) => z.id)) console.log(`zooms: ${zooms.map((z) => z.id).join(" ")} (video.json "zooms" adjusts one by id)`);
   const box = frameBox(OUT, frame, ZOOM);
-  const assets = await frameAssets(path.join(path.dirname(DIR), "_frame"), { out: OUT, frame: { ...frame, zoom: ZOOM }, box });
+  const assets = await frameAssets(path.join(path.dirname(DIR), "_frame"), { out: OUT, frame: { ...frame, zoom: ZOOM }, box, look });
   const graph = videoGraph({ ...assets, out: OUT, box, cards: timeline.cards || [], cardFiles: timeline.cardFiles || [], zooms, totalMs, take: P.raw, captureIn });
   const inputs = ["-i", P.raw, ...graph.inputs];
   let filter = graph.filter;
@@ -228,10 +233,10 @@ async function finish(lines, timeline, taken) {
 // take's best still (coverpick.js). `taken` is the take's timeline. Returns
 // what it drew, for the report.
 async function makeThumbnail(file, words, taken) {
-  const draw = (cover) => renderCover({ cover, raw: P.raw, timeline: taken, frame, file, captureIn });
+  const draw = (cover) => renderCover({ cover, raw: P.raw, timeline: taken, frame, file, captureIn, look });
   let made;
   if (video.cover === "card") {
-    await renderThumbnail(words, file, OUT);
+    await renderThumbnail(words, file, OUT, look);
     made = { file, from: "the opening card (video.json cover)" };
   } else if (video.cover) {
     await draw(video.cover);
@@ -252,7 +257,7 @@ async function makeThumbnail(file, words, taken) {
       made = { file, from: "picked from the take", cover: picked.cover, moment: `${where}, ${mmss(pick.ms)} into the take`, ...(passedOver.length && { passedOver }) };
       console.log(`thumbnail: the window at ${made.moment} (best of ${picked.ranked.length} stills); set video.json "cover" to choose another, as in ${JSON.stringify(picked.cover)}`);
     } else {
-      await renderThumbnail(words, file, OUT);
+      await renderThumbnail(words, file, OUT, look);
       made = { file, from: "the opening card: no still of the take would do", ...(passedOver.length && { passedOver }) };
       console.log(`thumbnail: no still of the take would do, so it is the opening card${passedOver.length ? ` (${passedOver.join("; ")})` : ""}`);
     }
@@ -277,6 +282,8 @@ async function makeThumbnail(file, words, taken) {
   }
   if (!muxOnly) await record(lines);
   if (dry) return;
+  look = lookOf(video.look, DIR);
+  if (look.brand) console.log(`look: video.json "look" (${Object.keys(video.look).join(", ")})`);
   await ensureCards();
   const timeline = await render(lines);
   const taken = JSON.parse(fs.readFileSync(P.timeline, "utf8"));

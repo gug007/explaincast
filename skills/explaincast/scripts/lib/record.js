@@ -12,6 +12,7 @@ const { onTeardown } = require("./teardown");
 const GAP_MS = 450;
 const LEAD_MS = 500;
 const TAIL_MS = 1800;
+const SETTLE_MS = 150;
 
 // `progress` collects the lines done so far, for the partial timeline a failed
 // take leaves; `check` throws when the recording can no longer be used.
@@ -27,6 +28,9 @@ async function runBeats(stage, lines, beats, t0, { gapMs = GAP_MS, tailMs = TAIL
     stage.beginLine(line);
     await beat(stage, line);
     if (i === 0 && (await stage.isCovered())) await stage.reveal();
+    // frames/ shows each line settled at its end, and the target's own checks run on that moment.
+    await stage.holdUntil(line.ms - SETTLE_MS);
+    await stage.endLine();
     await stage.frame(line.id);
     const rest = startMs + line.ms + gapMs - (Date.now() - t0);
     if (rest < -1500) console.log(`  dead air after ${line.id}: ${(-rest / 1000).toFixed(1)} s past its line`);
@@ -124,13 +128,13 @@ async function recordTake({ video, dir, lines, beats, raw, framesDir, errorShot,
   }
 }
 
-// The topic cards as clips, run after the take is saved so a rendering hiccup
-// never costs the recording.
-async function renderTimelineCards(timeline, dir) {
+// The topic cards as clips in the video's look (look.js), run after the take
+// is saved so a rendering hiccup never costs the recording.
+async function renderTimelineCards(timeline, dir, look) {
   const cardsDir = path.join(dir, "cards");
   fs.rmSync(cardsDir, { recursive: true, force: true });
   fs.mkdirSync(cardsDir, { recursive: true });
-  return renderCards(timeline.cards || [], cardsDir, OUT, { layout: APP_LAYOUT });
+  return renderCards(timeline.cards || [], cardsDir, OUT, { layout: APP_LAYOUT, look });
 }
 
 module.exports = { recordTake, renderTimelineCards, GAP_MS, LEAD_MS, TAIL_MS };

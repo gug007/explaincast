@@ -48,6 +48,13 @@ class WebStage extends Stage {
     this.page = page;
     this.pointer = { x: opts.origin.w * 0.56, y: opts.origin.h * 0.52 };
     this.noCursor = opts.noCursor;
+    this.pageChecks = opts.pageChecks;
+  }
+
+  // An idea page built on the kit reports what it would flag on screen (idea/stage.js lint).
+  async endLine() {
+    if (!this.pageChecks) return;
+    for (const issue of await this.page.evaluate(() => window.stage?.lint?.() || [])) this.warn("page", issue);
   }
 
   async drawOverlay() {
@@ -181,9 +188,15 @@ async function openWeb({ video, dir, frame, log }) {
   const origin = { x: 0, y: 0, w: frame.width, h: frame.height, scale: ZOOM };
   return {
     hooks: { page, context },
-    ready: async () => {},
+    // A page on the idea kit lays itself out first and says so with window.ready.
+    ready: async () => {
+      if (!t.file) return;
+      await page.waitForFunction(() => !window.stage || window.ready === true, null, { timeout: 15000 }).catch(() => {
+        throw new Error(`${t.file} loads the idea kit but never set window.ready; check that it calls stage.steps()`);
+      });
+    },
     capture: (onFrame) => new Screencast(page, size, onFrame).start(),
-    stage: (opts) => new WebStage(page, { ...opts, origin, noCursor: t.cursor === false }),
+    stage: (opts) => new WebStage(page, { ...opts, origin, noCursor: t.cursor === false, pageChecks: !!t.file }),
     close: () => browser.close(),
   };
 }

@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { norm, findPhrase } = require("./words");
 const { audienceOf } = require("./audience");
+const { lookProblems } = require("./look");
 
 const MAX_FRAME = { w: 1200, h: 680 };
 
@@ -22,10 +23,25 @@ function cuesIn(fn) {
 
 const sentences = (text) => (text.match(/[^.!?]+[.!?]*/g) || []).map((x) => x.trim()).filter(Boolean);
 
+const LOCAL_REF = /\b(?:src|href)\s*=\s*["']([^"'#?]+)/g;
+
+// A page target: every local file it loads is there and, on the idea kit, the starter's placeholders are gone.
+function checkPage(html, name, base, errors) {
+  if (html.includes("idea/stage.js") && /\bTODO\b/.test(html)) errors.push(`the page ${name} still has a TODO placeholder`);
+  for (const [, ref] of html.matchAll(LOCAL_REF)) {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(ref) || ref.includes("${")) continue;
+    if (!fs.existsSync(path.resolve(base, decodeURI(ref)))) errors.push(`the page ${name} loads ${ref}, which is not there`);
+  }
+}
+
 function checkTarget(t, errors, dir) {
   if (!t || !["web", "window"].includes(t.type)) return errors.push('video.json "target" needs a "type": "web" or "window"');
   if (t.type === "web" && !t.url && !t.file) errors.push('a web target needs "url" or "file"');
-  if (t.file && dir && !fs.existsSync(path.resolve(dir, t.file))) errors.push(`the target file ${t.file} is not there (a relative path starts at the video folder)`);
+  if (t.file && dir) {
+    const page = path.resolve(dir, t.file);
+    if (!fs.existsSync(page)) errors.push(`the target file ${t.file} is not there (a relative path starts at the video folder)`);
+    else checkPage(fs.readFileSync(page, "utf8"), t.file, path.dirname(page), errors);
+  }
   if (t.type === "window" && !t.app && !t.launch) errors.push('a window target needs "app" or "launch"');
   if ((t.width || 0) > MAX_FRAME.w || (t.height || 0) > MAX_FRAME.h) errors.push(`the target is at most ${MAX_FRAME.w}x${MAX_FRAME.h} points, or it runs off the canvas`);
 }
@@ -107,6 +123,7 @@ function checkVideo(video, beats, { dir = null } = {}) {
     if (bad.length) errors.push(`video.json zooms["${id}"]: unknown ${bad.join(", ")} (scale, at, ms or drop)`);
   }
   checkEdit(video, seen, errors, warnings, dir);
+  errors.push(...lookProblems(video.look, dir));
   return { errors, warnings };
 }
 

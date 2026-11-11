@@ -2,25 +2,38 @@
 // cursor and its tap ring, the topic card, and a small locator. `installStage`
 // is serialised into the page, so it must stay self-contained.
 
-// The warm canvas the cards and the app window share, and its three pale pools
-// of peach, sand and sage (drifting on a card, still and fainter behind the app).
+// explaincast's own look, the default for every audience: the warm canvas the
+// cards and the app window share, its three pale pools of peach, sand and sage
+// (drifting on a card, still and fainter behind the app) and a serif. video.json
+// "look" swaps in a brand's (look.js).
 const CANVAS = "#ebe5d9";
-const POOLS =
-  "radial-gradient(40% 50% at 20% 30%, #f2d6c2, transparent 70%), radial-gradient(45% 55% at 80% 70%, #e9dcb6, transparent 70%), radial-gradient(35% 45% at 60% 20%, #d7e0cd, transparent 70%)";
+const INK = "#141414";
+const SERIF = `"Iowan Old Style", "Palatino", Georgia, serif`;
+// Where each pool sits; a brand's pool colours take these places in order.
+const POOL_SHAPES = ["40% 50% at 20% 30%", "45% 55% at 80% 70%", "35% 45% at 60% 20%"];
+const poolsOf = (colours) => colours.map((c, i) => `radial-gradient(${POOL_SHAPES[i]}, ${c}, transparent 70%)`).join(", ");
+const POOLS = poolsOf(["#f2d6c2", "#e9dcb6", "#d7e0cd"]);
 const POOLS_AT_REST = "translate(-4%, -3%) rotate(0) scale(1)";
 
-const OVERLAY_CSS = `
-#explaincast-card { position: fixed; inset: 0; z-index: 2147483640; isolation: isolate; display: flex; align-items: center; justify-content: center; padding: 0 240px; background: ${CANVAS}; color: #141414; font: 600 150px/1.12 "Iowan Old Style", "Palatino", Georgia, serif; letter-spacing: -0.02em; text-align: center; text-wrap: balance; opacity: 0; pointer-events: none; }
+// The card in a look's colours and face; `pools: null` leaves the canvas flat.
+// A brand's logo sits at the top of the title column, on the closing card.
+function overlayCss({ canvas = CANVAS, ink = INK, font = SERIF, pools = POOLS } = {}) {
+  return `
+#explaincast-card { position: fixed; inset: 0; z-index: 2147483640; isolation: isolate; display: flex; align-items: center; justify-content: center; padding: 0 240px; background: ${canvas}; color: ${ink}; font: 600 150px/1.12 ${font}; letter-spacing: -0.02em; text-align: center; text-wrap: balance; opacity: 0; pointer-events: none; }
 #explaincast-card > div { position: relative; z-index: 1; }
 #explaincast-card.cover { justify-content: flex-start; padding: 0 0 0 128px; text-align: left; font-size: 190px; line-height: 1.02; letter-spacing: -0.025em; }
 #explaincast-card.cover > div { max-width: 880px; }
-#explaincast-card::before { content: ""; position: absolute; inset: -20%; z-index: 0; filter: blur(60px); background: ${POOLS}; animation: explaincast-drift 26s ease-in-out infinite alternate; }
+${pools ? `#explaincast-card::before { content: ""; position: absolute; inset: -20%; z-index: 0; filter: blur(60px); background: ${pools}; animation: explaincast-drift 26s ease-in-out infinite alternate; }` : ""}
 @keyframes explaincast-drift { from { transform: ${POOLS_AT_REST}; } to { transform: translate(4%, 3%) rotate(6deg) scale(1.08); } }
+#explaincast-logo { position: absolute; left: 128px; top: 112px; z-index: 1; height: 120px; max-width: 640px; object-fit: contain; object-position: left center; opacity: 0; }
 #explaincast-tick { position: fixed; left: 0; top: 0; width: 1px; height: 1px; pointer-events: none; z-index: 2147483647; opacity: 0.02; animation: explaincast-tick 1s linear infinite; }
 @keyframes explaincast-tick { from { transform: translateX(0); } to { transform: translateX(1px); } }
 #explaincast-cursor { position: fixed; left: 0; top: 0; z-index: 2147483647; pointer-events: none; width: 40px; height: 40px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.65)); will-change: transform; }
 #explaincast-ring { position: fixed; left: 0; top: 0; z-index: 2147483646; pointer-events: none; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%; border: 5px solid rgba(255,255,255,.92); opacity: 0; }
 `;
+}
+
+const OVERLAY_CSS = overlayCss();
 
 const CARD_FADE_MS = 300;
 // The opening card hands over in one move: its words lift away over `titleMs`
@@ -33,10 +46,18 @@ const OPEN_LIFT = { titleLeadMs: 500, titleMs: 450, leadMs: 300, fadeMs: 700, ri
 const CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.5 3.2v16.3l4.3-4 2.6 5.9 2.9-1.3-2.6-5.8h5.9z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 const HOTSPOT = { x: 9, y: 5 };
 
-function installStage({ cursorSvg, hotspot, scale }) {
+// `logo` (a data URL) is the brand's mark, shown on the cards that ask for it.
+function installStage({ cursorSvg, hotspot, scale, logo }) {
   const cur = document.createElement("div");
   cur.id = "explaincast-cursor";
   cur.innerHTML = cursorSvg;
+  let mark = null;
+  if (logo) {
+    mark = document.createElement("img");
+    mark.id = "explaincast-logo";
+    mark.alt = "";
+    mark.src = logo;
+  }
   const ring = document.createElement("div");
   ring.id = "explaincast-ring";
   const card = document.createElement("div");
@@ -78,6 +99,7 @@ function installStage({ cursorSvg, hotspot, scale }) {
 
   window.__lc = {
     place,
+    logoReady: () => (mark ? mark.decode().catch(() => {}) : Promise.resolve()),
     hideCursor: () => (cur.style.visibility = "hidden"),
     showCursor: () => (cur.style.visibility = ""),
     // Blank card canvas up before the first frame, so a video opens on it.
@@ -96,8 +118,9 @@ function installStage({ cursorSvg, hotspot, scale }) {
       });
     },
     // A topic card: the canvas fades in, the words rise and sharpen one after
-    // another, the card holds, then fades out. `hold` leaves it up.
-    card(title, ms, hold = false) {
+    // another, the card holds, then fades out. `hold` leaves it up. `withLogo`
+    // puts the brand's logo above the words (the closing card), rising first.
+    card(title, ms, hold = false, withLogo = false) {
       const fade = 300;
       const perWord = 110;
       const wordMs = 640;
@@ -110,16 +133,18 @@ function installStage({ cursorSvg, hotspot, scale }) {
         inner.append(span);
         if (i < words.length - 1) inner.append(document.createTextNode(" "));
       });
-      card.replaceChildren(inner);
+      const logoShown = withLogo && mark ? [mark] : [];
+      card.replaceChildren(...logoShown, inner);
       // A long word or title shrinks to its column instead of running under
-      // the window beside it.
+      // the window beside it, and below the logo when there is one.
       const widest = Math.max(...[...inner.children].map((s) => s.getBoundingClientRect().width));
-      const fit = Math.min(1, inner.clientWidth / widest, (innerHeight * 0.8) / inner.getBoundingClientRect().height);
+      const room = logoShown.length ? 0.6 : 0.8;
+      const fit = Math.min(1, inner.clientWidth / widest, (innerHeight * room) / inner.getBoundingClientRect().height);
       if (fit < 1) inner.style.fontSize = `${parseFloat(getComputedStyle(inner).fontSize) * fit}px`;
       cur.style.visibility = "hidden";
       const shownAt = covered ? Promise.resolve() : fadeCard(0, 1, "ease-out");
       covered = true;
-      const reveals = [...inner.children].map((span, i) =>
+      const reveals = [...logoShown, ...inner.children].map((span, i) =>
         span.animate(
           [
             { opacity: 0, transform: "translateY(0.35em)", filter: "blur(12px)" },
@@ -196,4 +221,4 @@ function installStage({ cursorSvg, hotspot, scale }) {
   };
 }
 
-module.exports = { CANVAS, POOLS, POOLS_AT_REST, OVERLAY_CSS, CURSOR_SVG, HOTSPOT, CARD_FADE_MS, OPEN_LIFT, installStage };
+module.exports = { CANVAS, INK, SERIF, POOLS, POOLS_AT_REST, poolsOf, overlayCss, OVERLAY_CSS, CURSOR_SVG, HOTSPOT, CARD_FADE_MS, OPEN_LIFT, installStage };

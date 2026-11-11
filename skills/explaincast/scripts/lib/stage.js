@@ -34,6 +34,8 @@ class Stage extends Timing {
   async install() {}
   finish() {}
   async nudge() {}
+  // Runs at the end of every line, once it has settled; a target can check its own screen here.
+  async endLine() {}
 
   // Window points → the finished video's pixels.
   outPoint(p) {
