@@ -1,4 +1,4 @@
-/* The Map look for idea pages: one stage of parts that never move. Classes and
+/* The look of idea pages: the product's own screens on one stage. Classes and
    calls: reference/idea-pages.md. Every size here is at least 15px, so text stays
    readable when the video plays small. */
 :root {
@@ -8,7 +8,7 @@
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
   --ease: cubic-bezier(.22, .8, .2, 1);
 }
-/* A kind is one sort of thing on screen (the token, its hash, an email), with one colour for the whole video. */
+/* A kind colours a .ui-tag: one sort of thing on screen, with one colour for the whole video. */
 :root, .slate { --k-bg: #f1f5f9; --k-fg: #334155; --k-ring: #cbd5e1; --k-line: #0f172a; }
 .amber { --k-bg: #fef3c7; --k-fg: #92400e; --k-ring: #fcd34d; --k-line: #d97706; }
 .indigo { --k-bg: #e0e7ff; --k-fg: #3730a3; --k-ring: #a5b4fc; --k-line: #4f46e5; }
@@ -36,66 +36,18 @@ body { position: relative; background: var(--bg); background-image: radial-gradi
 .chapters span.now { background: var(--ink); color: #fff; }
 .chapters span.done { color: var(--muted); }
 
-/* parts */
-.node { position: absolute; width: 240px; background: var(--card); border: 1.5px solid var(--line); border-radius: 18px; padding: 16px 16px 14px; box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 10px 30px -12px rgba(15, 23, 42, .18); transition: opacity .5s var(--ease), transform .5s var(--ease), filter .5s, border-color .4s, box-shadow .4s; }
-.node.hidden { transform: scale(.92); }
-.node.dim { opacity: .38; filter: grayscale(1); }
-.node.lit { border-color: var(--ink); box-shadow: 0 0 0 4px rgba(15, 23, 42, .08), 0 14px 34px -12px rgba(15, 23, 42, .28); }
-.node.good { border-color: #16a34a; box-shadow: 0 0 0 4px #dcfce7, 0 14px 34px -12px rgba(21, 128, 61, .3); }
-.node.bad { border-color: #dc2626; box-shadow: 0 0 0 5px #fee2e2, 0 14px 34px -12px rgba(220, 38, 38, .3); }
-.nh { display: flex; align-items: center; gap: 12px; }
-.ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--tint); color: var(--ink); }
-.ic svg { width: 22px; height: 22px; }
-.nh b { display: block; font: 680 19px/1.15 var(--sans); letter-spacing: -.01em; }
-.nh small { display: block; margin-top: 2px; font: 500 15px var(--sans); color: var(--muted); }
 svg.lucide { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/* a slot holds what a part holds right now; only its .on child shows. stage.js sizes it to its tallest state. */
+/* a slot holds the states of a screen or a .states element; only its .on child shows. stage.js sizes it to its tallest state. */
 .slot { position: relative; margin-top: 12px; }
 .slot > [data-s] { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .4s var(--ease); }
 .slot.sized > [data-s] { bottom: 0; }
 .slot > [data-s].on { opacity: 1; transform: none; }
+.slot > [data-s]:not(.on) { pointer-events: none; }
 
-/* a card is a detail panel placed on the stage; it can hold states too */
-.card { position: absolute; display: flex; flex-direction: column; background: rgba(255, 255, 255, .94); border: 1.5px solid var(--line); border-radius: 16px; padding: 12px 16px; box-shadow: 0 10px 30px -16px rgba(15, 23, 42, .2); transition: opacity .4s, transform .5s var(--ease), filter .5s; }
-.card.hidden { transform: translateY(10px); }
-.card h5 { font: 650 15px var(--sans); color: var(--muted); }
-.card .slot { flex: 1; margin-top: 6px; }
-.card .slot > [data-s] { justify-content: flex-start; }
+.caret { display: inline-block; width: 1.5px; height: 17px; margin-left: 1px; background: currentColor; }
 
-/* values */
-.chip { display: inline-flex; align-items: center; gap: 7px; width: max-content; padding: 5px 10px; border-radius: 9px; background: var(--k-bg); color: var(--k-fg); box-shadow: inset 0 0 0 1.5px var(--k-ring); font: 650 15px var(--mono); white-space: nowrap; transition: opacity .35s, filter .35s; }
-.chip.text { font-family: var(--sans); }
-.chip svg { width: 15px; height: 15px; stroke-width: 2.4; }
-.chip.gone { opacity: .45; text-decoration: line-through; filter: grayscale(1); }
-.pill { display: inline-flex; align-items: center; gap: 6px; width: max-content; padding: 4px 9px; border-radius: 8px; background: var(--k-bg); color: var(--k-fg); font: 650 15px var(--sans); transition: background .35s, color .35s, opacity .35s; }
-.pill.lit { background: var(--ink); color: #fff; }
-.row { display: flex; align-items: center; gap: 8px; transition: opacity .35s; }
-.muted { font-size: 15px; color: var(--quiet); }
-.done-text { font: 650 17px var(--sans); color: #15803d; }
-.url { font: 600 15px var(--mono); color: var(--muted); white-space: nowrap; }
-.url i { font-style: normal; padding: 1px 4px; border-radius: 5px; background: var(--k-bg); color: var(--k-fg); }
-.field { display: flex; align-items: center; width: 100%; height: 32px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 9px; font: 500 15px var(--sans); color: var(--ink); white-space: nowrap; overflow: hidden; }
-.caret { display: inline-block; width: 1.5px; height: 17px; margin-left: 1px; background: var(--ink); }
-.btn { width: max-content; padding: 6px 12px; border-radius: 9px; background: var(--ink); color: #fff; font: 650 15px var(--sans); transition: transform .2s, background .3s; }
-.btn.press { transform: scale(.92); background: #0284c7; }
-.check { display: flex; align-items: center; gap: 10px; font: 600 16px var(--sans); color: var(--quiet); transition: color .3s; }
-.check::before { content: "✓"; flex: none; width: 22px; height: 22px; border-radius: 7px; border: 1.5px solid var(--line); display: grid; place-items: center; font: 800 13px var(--sans); color: transparent; transition: background .3s, border-color .3s, color .3s; }
-.check.on { color: var(--ink); }
-.check.on::before { background: #16a34a; border-color: #16a34a; color: #fff; }
-.check small { margin-left: auto; font: 500 15px var(--sans); color: var(--muted); }
-
-/* connectors, travelling copies, badges */
-svg.edges { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.edge { fill: none; stroke: #cbd5e1; stroke-width: 2.5; stroke-linecap: round; transition: stroke .4s, opacity .4s; }
-.edge.dim { opacity: .35; }
-.edge.flow { stroke: var(--k-line); stroke-dasharray: 7 7; animation: stage-flow .7s linear infinite; }
-@keyframes stage-flow { to { stroke-dashoffset: -14; } }
-.packet { position: absolute; left: 0; top: 0; z-index: 5; offset-rotate: 0deg; offset-anchor: 50% 50%; box-shadow: inset 0 0 0 1.5px var(--k-ring), 0 6px 18px -6px rgba(15, 23, 42, .35); }
-.badge { position: absolute; z-index: 6; padding: 4px 10px; border-radius: 999px; background: var(--k-line); color: #fff; font: 650 15px var(--sans); white-space: nowrap; transition: opacity .35s, transform .35s var(--ease); }
-.badge.hidden { transform: scale(.8); }
-
-/* screens: the product's own UI with the change in it. A class change that moves or resizes one animates it. */
+/* screens: the product's own UI. A class change that moves or resizes one animates it. */
 .screen {
   --ui-bg: #fff; --ui-panel: #f6f7f9; --ui-ink: #111827; --ui-muted: #6b7280; --ui-line: #e5e7eb;
   --ui-accent: #2563eb; --ui-on-accent: #fff; --ui-font: var(--sans); --ui-mono: var(--mono); --ui-radius: 10px;

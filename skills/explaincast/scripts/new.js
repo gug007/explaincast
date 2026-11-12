@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// new.js "<title>" (--url <url> | --file <page.html> [--screens] | --app <name>) [--for public|client|me]
+// new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me]
 //        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]
 // Starts ~/Movies/explaincast/<slug>/ (EXPLAINCAST_DIR) with video.json and
-// beats.js, and for an idea a starter page with the kit beside it in idea/: a
-// Map page, or with --screens a page of the product's own screens.
+// beats.js, and for an idea a starter page of the product's own screens, with
+// the kit beside it in idea/.
 // The nearest .explaincast.json up from the current folder supplies the
 // project's defaults: target, for, brand, look, hide, pronounce, heard, voice,
 // style.
@@ -15,7 +15,7 @@ const { AUDIENCES } = require("./lib/audience");
 const { isFontFile } = require("./lib/look");
 const { mockFrom } = require("./lib/fixtures");
 
-const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> [--screens] | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]';
+const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me] [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]';
 const DEFAULT_KEYS = ["target", "for", "brand", "look", "hide", "pronounce", "heard", "voice", "style"];
 const MAX_SLUG = 60;
 const KIT = path.join(__dirname, "..", "idea");
@@ -59,7 +59,7 @@ function slugOf(title) {
 
 const { values: o, positionals } = parseArgs({
   args: process.argv.slice(2),
-  options: { for: { type: "string" }, url: { type: "string" }, file: { type: "string" }, app: { type: "string" }, slug: { type: "string" }, card: { type: "string" }, brand: { type: "string" }, screens: { type: "boolean" }, force: { type: "boolean" } },
+  options: { for: { type: "string" }, url: { type: "string" }, file: { type: "string" }, app: { type: "string" }, slug: { type: "string" }, card: { type: "string" }, brand: { type: "string" }, force: { type: "boolean" } },
   allowPositionals: true,
 });
 const title = positionals[0];
@@ -79,7 +79,6 @@ if (fs.existsSync(dir) && !o.force) fail(`${dir} exists; pass --force to rewrite
 const { cards } = AUDIENCES[audience];
 const brand = o.brand || defaults.brand;
 const idea = !!target.file;
-if (o.screens && !idea) fail(`--screens goes with --file <page.html>\n${USAGE}`);
 const narration = [
   ...(cards ? [{ id: "title", text: `${title}. TODO: one sentence on what this video shows.` }] : []),
   { id: "first", text: idea ? "TODO: the first step of the idea." : "TODO: the first step, naming the control before the click lands on it." },
@@ -116,8 +115,8 @@ if (page && !fs.existsSync(page)) {
   const kit = path.join(path.dirname(page), "idea");
   fs.mkdirSync(kit, { recursive: true });
   for (const f of KIT_FILES) fs.copyFileSync(path.join(KIT, f), path.join(kit, f));
-  const html = fs.readFileSync(path.join(KIT, o.screens ? "screens.html" : "page.html"), "utf8").replaceAll("{{title}}", title.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]));
+  const html = fs.readFileSync(path.join(KIT, "page.html"), "utf8").replaceAll("{{title}}", title.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]));
   fs.writeFileSync(page, html);
-  console.log(`page ${page}: a starter ${o.screens ? "Screens" : "Map"} page; build on it (reference/idea-pages.md)`);
+  console.log(`page ${page}: a starter page of screens; build on it (reference/idea-pages.md)`);
 }
 console.log(dir);

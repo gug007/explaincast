@@ -1,7 +1,6 @@
-// stage.js: the Map kit for explaincast idea pages. The parts sit on one stage
-// and never move; each step changes the headline, the focus, what each part
-// holds, and what travels between them. A Screens page shows a product's own UI
-// instead, one screen at a time. Calls: reference/idea-pages.md.
+// stage.js: the kit for explaincast idea pages. A page shows the product's own
+// screens, one at a time; each step changes the headline and acts on the
+// screen that is open. Calls: reference/idea-pages.md.
 // Icons are Lucide (ISC licence, idea/LICENSE-lucide.txt).
 (function (root) {
   const ICONS = {
@@ -47,79 +46,19 @@
     zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   };
 
-  const SIDES = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
-  const GAP = 2;
-  const fmt = ([x, y]) => `${+x.toFixed(1)} ${+y.toFixed(1)}`;
-
-  // The side of each box that faces the other one.
-  function facing(a, b) {
-    const dx = b.x + b.w / 2 - (a.x + a.w / 2);
-    const dy = b.y + b.h / 2 - (a.y + a.h / 2);
-    if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? ["right", "left"] : ["left", "right"];
-    return dy >= 0 ? ["bottom", "top"] : ["top", "bottom"];
-  }
-
-  function anchor(r, side, shift) {
-    if (side === "left") return [r.x - GAP, r.y + r.h / 2 + shift];
-    if (side === "right") return [r.x + r.w + GAP, r.y + r.h / 2 + shift];
-    if (side === "top") return [r.x + r.w / 2 + shift, r.y - GAP];
-    if (side === "bottom") return [r.x + r.w / 2 + shift, r.y + r.h + GAP];
-    throw new Error(`stage: an edge side is left, right, top or bottom, not "${side}"`);
-  }
-
-  // A connector from box `a` to box `b` ({x, y, w, h}): out of the facing sides
-  // unless `from`/`to` name them, `shift` moving each end along its side. Two
-  // ends on the same side make a U that reaches `bend` past the further one.
-  function edgePath(a, b, { from, to, shift = 0, bend } = {}) {
-    const [fa, fb] = facing(a, b);
-    from = from || fa;
-    to = to || fb;
-    const [s0, s1] = Array.isArray(shift) ? shift : [shift, shift];
-    const p0 = anchor(a, from, s0), p1 = anchor(b, to, s1);
-    const n0 = SIDES[from], n1 = SIDES[to];
-    if (from === to) {
-      const k = bend ?? 90;
-      if (n0[0]) {
-        const x = n0[0] > 0 ? Math.max(p0[0], p1[0]) + k : Math.min(p0[0], p1[0]) - k;
-        return `M ${fmt(p0)} C ${fmt([x, p0[1]])}, ${fmt([x, p1[1]])}, ${fmt(p1)}`;
-      }
-      const y = n0[1] > 0 ? Math.max(p0[1], p1[1]) + k : Math.min(p0[1], p1[1]) - k;
-      return `M ${fmt(p0)} C ${fmt([p0[0], y])}, ${fmt([p1[0], y])}, ${fmt(p1)}`;
-    }
-    const straight = (n0[0] && n1[0] && Math.abs(p0[1] - p1[1]) < 1) || (n0[1] && n1[1] && Math.abs(p0[0] - p1[0]) < 1);
-    if (straight && bend == null) return `M ${fmt(p0)} L ${fmt(p1)}`;
-    const k = bend ?? Math.min(120, Math.max(40, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) * 0.4));
-    const c0 = [p0[0] + n0[0] * k, p0[1] + n0[1] * k], c1 = [p1[0] + n1[0] * k, p1[1] + n1[1] * k];
-    return `M ${fmt(p0)} C ${fmt(c0)}, ${fmt(c1)}, ${fmt(p1)}`;
-  }
-
-  if (typeof module === "object" && module.exports) module.exports = { edgePath, facing, ICONS };
+  if (typeof module === "object" && module.exports) module.exports = { ICONS };
   if (typeof document === "undefined") return;
 
-  const NS = "http://www.w3.org/2000/svg";
-  const KINDS = ["amber", "indigo", "sky", "green", "red", "violet", "slate"];
-  const SLOT_MIN = 72;
   const UI_BOX = ".ui-field, .ui-btn, .ui-item, .ui-tag, .ui-switch, .ui-card, .ui-bar, .ui-side, .ui-main, .sv";
-  const SAMPLES = 40;
-  const edges = new Map();
-  const badges = new Map();
   const reported = new Set();
   const failures = [];
-  let svg = null, built = false, emptyLines = 0;
+  let built = false, emptyLines = 0;
 
   const el = (id) => {
     const found = document.getElementById(id);
     if (!found) throw new Error(`stage: there is no element with id "${id}"`);
     return found;
   };
-  const edgeOf = (id) => {
-    const e = edges.get(id);
-    if (!e) throw new Error(`stage: there is no edge "${id}"`);
-    return e;
-  };
-  const boxOf = (n) => ({ x: n.offsetLeft, y: n.offsetTop, w: n.offsetWidth, h: n.offsetHeight });
-  const isHidden = (n) => n.classList.contains("hidden");
-  const isLive = (e) => e.path && !e.path.classList.contains("hidden");
 
   function icon(name) {
     if (!ICONS[name]) {
@@ -129,7 +68,7 @@
     return `<svg class="lucide" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
   }
 
-  // Wraps the [data-s] children of a part or card in a slot that shows one at a time.
+  // Wraps the [data-s] children of a screen or a .states element in a slot that shows one at a time.
   function makeSlot(host) {
     const states = [...host.children].filter((c) => c.dataset.s != null);
     if (!states.length) return;
@@ -140,12 +79,12 @@
     if (!states.some((s) => s.classList.contains("on"))) states[0].classList.add("on");
   }
 
-  // A slot is as tall as its tallest state (SLOT_MIN at least in a part), so
-  // switching states never moves anything. Reads first, then writes: one layout.
+  // A slot is as tall as its tallest state, so switching states never moves
+  // anything. Reads first, then writes: one layout.
   function sizeSlots() {
     const slots = [...document.querySelectorAll(".slot")];
     slots.forEach((slot) => slot.classList.remove("sized"));
-    const heights = slots.map((slot) => Math.max(slot.parentElement.classList.contains("node") ? SLOT_MIN : 0, ...[...slot.children].map((c) => c.scrollHeight)));
+    const heights = slots.map((slot) => Math.max(0, ...[...slot.children].map((c) => c.scrollHeight)));
     slots.forEach((slot, i) => {
       slot.style.minHeight = `${heights[i]}px`;
       slot.classList.add("sized");
@@ -172,17 +111,6 @@
   function build() {
     if (built) return;
     built = true;
-    document.querySelectorAll(".node").forEach((n) => {
-      const head = document.createElement("div");
-      head.className = "nh";
-      head.innerHTML = `${n.dataset.icon ? `<span class="ic">${icon(n.dataset.icon)}</span>` : ""}<div><b></b><small></small></div>`;
-      head.querySelector("b").textContent = n.dataset.title || "";
-      if (n.dataset.sub) head.querySelector("small").textContent = n.dataset.sub;
-      else head.querySelector("small").remove();
-      n.prepend(head);
-      makeSlot(n);
-    });
-    document.querySelectorAll(".card").forEach(makeSlot);
     document.querySelectorAll(".screen").forEach(buildScreen);
     document.querySelectorAll(".states").forEach(makeSlot);
     document.querySelectorAll(".ui-video").forEach((v) => {
@@ -208,52 +136,12 @@
       h.textContent = "";
       h.appendChild(s);
     }
-    svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("class", "edges");
-    document.body.prepend(svg);
     if (document.querySelector(".chapters")) chapter(0);
   }
 
-  function draw(e) {
-    e.d = edgePath(boxOf(el(e.from)), boxOf(el(e.to)), e.opts);
-    if (!e.path) {
-      e.path = document.createElementNS(NS, "path");
-      e.path.id = e.id;
-      e.path.setAttribute("class", "edge");
-      svg.appendChild(e.path);
-    }
-    e.path.setAttribute("d", e.d);
-    syncEdge(e);
-  }
-
-  // An edge shows once both its parts are on stage, unless it waits for show().
-  function syncEdge(e) {
-    if (!e.path) return;
-    const ends = !isHidden(el(e.from)) && !isHidden(el(e.to));
-    e.path.classList.toggle("hidden", !(ends && (e.shown || !e.opts.manual)));
-  }
-
-  function edge(id, from, to, opts = {}) {
-    const e = { id, from, to, opts, shown: false };
-    edges.set(id, e);
-    if (svg) draw(e);
-  }
-
-  function setShown(on, ids) {
-    ids.forEach((id) => {
-      if (edges.has(id)) edges.get(id).shown = on;
-      else el(id).classList.toggle("hidden", !on);
-    });
-    edges.forEach(syncEdge);
-  }
+  const setShown = (on, ids) => ids.forEach((id) => el(id).classList.toggle("hidden", !on));
   const show = (...ids) => setShown(true, ids);
   const hide = (...ids) => setShown(false, ids);
-
-  // Keeps the named parts in full colour and dims the rest; focus() clears it.
-  function focus(...ids) {
-    document.querySelectorAll(".node").forEach((n) => n.classList.toggle("dim", ids.length > 0 && !ids.includes(n.id)));
-    edges.forEach((e) => e.path && e.path.classList.toggle("dim", ids.length > 0 && !(ids.includes(e.from) && ids.includes(e.to))));
-  }
 
   const mark = (id, cls, on = true) => el(id).classList.toggle(cls, on);
 
@@ -280,82 +168,15 @@
     requestAnimationFrame(() => requestAnimationFrame(() => s.classList.remove("in")));
   }
 
-  // A new chapter starts with no part lit, good or bad.
   function chapter(i) {
     const pills = [...document.querySelectorAll(".chapters span")];
     if (!pills[i]) throw new Error(`stage: there is no chapter ${i}; the header lists ${pills.length}`);
-    document.querySelectorAll(".node").forEach((n) => n.classList.remove("lit", "good", "bad"));
     pills.forEach((p, k) => {
       p.classList.toggle("now", k === i);
       p.classList.toggle("done", k < i);
     });
     const eyebrow = document.querySelector(".eyebrow");
     if (eyebrow) eyebrow.textContent = pills[i].dataset.eyebrow || pills[i].textContent;
-  }
-
-  const kindOf = (node) => KINDS.find((k) => node.classList.contains(k)) || "slate";
-
-  function flow(id, kind = "slate", ms = 1300) {
-    const e = edgeOf(id);
-    e.shown = true;
-    syncEdge(e);
-    e.path.classList.remove("dim", ...KINDS);
-    e.path.classList.add("flow", kind);
-    clearTimeout(e.timer);
-    e.timer = setTimeout(() => e.path.classList.remove("flow", kind), ms);
-  }
-
-  // Moves a copy of a chip (an element id, or text for a new chip) along an
-  // edge, and resolves when it arrives. `kind` adds classes: "sky" or "sky text".
-  function travel(id, chip, { reverse = false, ms = 900, kind } = {}) {
-    const e = edgeOf(id);
-    const source = document.getElementById(chip);
-    let p;
-    if (source) {
-      p = source.cloneNode(true);
-      p.removeAttribute("id");
-      p.querySelectorAll("[id]").forEach((c) => c.removeAttribute("id"));
-      p.classList.remove("gone", "hidden");
-    } else {
-      p = document.createElement("span");
-      p.className = "chip slate";
-      p.textContent = chip;
-    }
-    if (kind) p.classList.add(...kind.split(/\s+/));
-    p.classList.add("packet");
-    p.style.offsetPath = `path("${e.d}")`;
-    document.body.appendChild(p);
-    flow(id, kindOf(p), ms + 400);
-    const a = p.animate(
-      [
-        { offsetDistance: "0%", opacity: 0, transform: "scale(.8)" },
-        { offsetDistance: "8%", opacity: 1, transform: "scale(1)", offset: 0.08 },
-        { offsetDistance: "92%", opacity: 1, transform: "scale(1)", offset: 0.92 },
-        { offsetDistance: "100%", opacity: 0, transform: "scale(.8)" },
-      ],
-      { duration: ms, easing: "cubic-bezier(.45, 0, .25, 1)", direction: reverse ? "reverse" : "normal", fill: "forwards" },
-    );
-    return a.finished.then(() => p.remove(), () => p.remove());
-  }
-
-  // Pins a badge above a part's top-left corner; badge(id, null) takes it away.
-  function badge(id, text, kind = "slate") {
-    let b = badges.get(id);
-    if (text == null) {
-      if (b) b.classList.add("hidden");
-      return;
-    }
-    const { x, y } = boxOf(el(id));
-    if (!b) {
-      b = document.createElement("span");
-      document.body.appendChild(b);
-      badges.set(id, b);
-    }
-    b.className = `badge hidden ${kind}`;
-    b.textContent = text;
-    b.style.left = `${x + 20}px`;
-    b.style.top = `${y - 14}px`;
-    requestAnimationFrame(() => b.classList.remove("hidden"));
   }
 
   function type(id, text, ms = 700) {
@@ -458,7 +279,7 @@
         if (tr.right > br.right + 1 || tr.bottom > br.bottom + 1 || tr.left < br.left - 1) issues.push(`"${text.slice(0, 40)}" runs out of its ${box.classList[0]} in #${p.closest(".screen").id}; shorten it or give the box room`);
       }
     }
-    const boxes = [...document.querySelectorAll(".node, .card, .screen")].filter(shown);
+    const boxes = [...document.querySelectorAll(".screen")].filter(shown);
     for (const b of boxes) {
       const inner = b.querySelector(":scope > .sv") || b;
       if (inner.scrollWidth > inner.clientWidth + 2 || inner.scrollHeight > inner.clientHeight + 2) issues.push(`#${b.id || b.className} has more content than fits in it`);
@@ -473,24 +294,11 @@
     for (const { b, r } of rects) {
       if (b.classList.contains("screen") && top.some((t) => overlap(r, t, 0))) issues.push(`#${b.id} runs into the headline; start it below ${Math.ceil(Math.max(...top.map((t) => t.bottom)))} points`);
     }
-    const live = [...edges.values()].filter(isLive);
-    for (const e of live) {
-      const bb = e.path.getBBox();
-      if (bb.x < 0 || bb.y < 0 || bb.x + bb.width > W || bb.y + bb.height > H) issues.push(`edge ${e.id} runs off the stage; give it a smaller bend or other sides`);
-      const near = rects.filter(({ b, r }) => b.id !== e.from && b.id !== e.to && r.left < bb.x + bb.width && bb.x < r.right && r.top < bb.y + bb.height && bb.y < r.bottom);
-      if (!near.length) continue;
-      const len = e.path.getTotalLength();
-      const pts = [];
-      for (let k = 1; k < SAMPLES; k++) pts.push(e.path.getPointAtLength((len * k) / SAMPLES));
-      for (const { b, r } of near) {
-        if (pts.some((pt) => pt.x > r.left + 4 && pt.x < r.right - 4 && pt.y > r.top + 4 && pt.y < r.bottom - 4)) issues.push(`edge ${e.id} crosses #${b.id}; route it with from/to sides or move a part`);
-      }
-    }
-    const content = [...rects.map((x) => x.r), ...live.map((e) => e.path.getBoundingClientRect())];
+    const content = rects.map((x) => x.r);
     if (content.length) {
       const bottom = Math.max(...content.map((r) => r.bottom)), right = Math.max(...content.map((r) => r.right));
       if (bottom < H * 0.62 || right < W * 0.62) emptyLines++;
-      if (emptyLines === 2) issues.push(`most of the stage stays empty (content ends at ${Math.round(right)}×${Math.round(bottom)} of ${W}×${H}); spread the parts over the whole stage`);
+      if (emptyLines === 2) issues.push(`most of the stage stays empty (content ends at ${Math.round(right)}×${Math.round(bottom)} of ${W}×${H}); give the screen the whole stage under the headline`);
     }
     return issues.filter((m) => !reported.has(m) && reported.add(m));
   }
@@ -507,7 +315,6 @@
       build();
       document.fonts.ready.then(() => requestAnimationFrame(() => {
         sizeSlots();
-        edges.forEach(draw);
         root.ready = true;
       }));
     };
@@ -515,5 +322,5 @@
     else start();
   }
 
-  root.stage = { steps, edge, show, hide, focus, mark, state, headline, chapter, flow, travel, badge, type, sleep, open, close, tap, lint };
+  root.stage = { steps, show, hide, mark, state, headline, chapter, type, sleep, open, close, tap, lint };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -26,33 +26,19 @@ const load = (dir) => {
 
 const IDEA = ["--file", "page.html", "--for", "me"];
 
-test("an idea video starts from the Map page, with the kit beside it, and is refused until its placeholders are gone", (t) => {
+test("an idea video starts from a page of screens, with the kit beside it, and is refused until its placeholders are gone", (t) => {
   const { dir, out } = scaffold(t, ["How <caching> works", ...IDEA]);
   const page = fs.readFileSync(path.join(dir, "page.html"), "utf8");
   assert.match(page, /<title>How &lt;caching&gt; works<\/title>/);
   assert.match(page, /idea\/stage\.js/);
   for (const f of ["stage.css", "stage.js", "LICENSE-lucide.txt"]) assert.ok(fs.existsSync(path.join(dir, "idea", f)), f);
-  assert.match(out, /a starter Map page/);
+  assert.match(page, /class="screen product"/);
+  assert.match(out, /a starter page of screens/);
   const { video, beats } = load(dir);
   assert.deepStrictEqual(video.target, { type: "web", file: "page.html", cursor: false });
   assert.match(beats.first.toString(), /go\(s, "first"\)/);
   const { errors } = checkVideo(video, beats, { dir });
   assert.ok(errors.includes("the page page.html still has a TODO placeholder"), errors.join("\n"));
-});
-
-test("a planned feature starts from the Screens page: the product's UI and no map", (t) => {
-  const { dir, out } = scaffold(t, ["A video switch", ...IDEA, "--screens"]);
-  const page = fs.readFileSync(path.join(dir, "page.html"), "utf8");
-  assert.match(page, /class="screen product"/);
-  assert.doesNotMatch(page, /class="node|stage\.edge/);
-  assert.match(out, /a starter Screens page/);
-  const { video, beats } = load(dir);
-  const { errors } = checkVideo(video, beats, { dir });
-  assert.ok(errors.includes("the page page.html still has a TODO placeholder"), errors.join("\n"));
-});
-
-test("--screens without a page is refused", (t) => {
-  assert.throws(() => scaffold(t, ["A video switch", "--url", "http://localhost:3000", "--screens"]), (e) => e.status === 2 && /--screens goes with --file/.test(e.stderr));
 });
 
 test("a page that is already there is left alone", (t) => {

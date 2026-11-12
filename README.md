@@ -84,8 +84,7 @@ To change something, ask the agent. It records again and voices only the lines y
 | You want a video of | Flag | What happens |
 | --- | --- | --- |
 | A website or web app | `--url <url>` | Runs headless, so you can keep using your Mac |
-| An idea, architecture or process | `--file page.html` | The agent draws it as one map of the parts, with the data moving between them, and drives it, also headless |
-| A planned feature, integration or redesign | `--file page.html --screens` | The agent draws the product's own screens with the change in them and walks through them, also headless |
+| An idea, architecture, process or planned feature | `--file page.html` | The agent draws the product's own screens, shows each step happening in them and walks through them one at a time, also headless |
 | A desktop app, terminal or editor | `--app "<name>"` | Experimental. Takes over your real pointer and keyboard, so leave the Mac alone. Needs `brew install cliclick` and Screen Recording and Accessibility permissions |
 
 To choose for yourself, add a flag from these tables, as in `/explaincast How checkout works --url http://localhost:3000 --for client`. In Claude Code, if another skill is also called `explaincast`, use the full name, `/explaincast:explaincast`.

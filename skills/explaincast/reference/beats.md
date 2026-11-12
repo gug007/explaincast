@@ -54,12 +54,12 @@ At the end of every line, a web take warns when the pointer rests on a small con
 
 ## Idea pages
 
-`new.js --file page.html` writes a starter page in the Map style, with its kit in `idea/`, and a beats.js whose `go()` runs a step of the page. Each beat calls a step on its word, and the take checks the page itself at the end of every line. [idea-pages.md](idea-pages.md) has the look, the markup and every `stage` call.
+`new.js --file page.html` writes a starter page of the product's own screens, with its kit in `idea/`, and a beats.js whose `go()` runs a step of the page. Each beat calls a step on its word, and the take checks the page itself at the end of every line. [idea-pages.md](idea-pages.md) has the look, the markup and every `stage` call.
 
 ```js
-async edge(s) {
-  await s.at("next door");
-  await go(s, "edge");
+async send(s) {
+  await s.at("Send");
+  await go(s, "send");
 },
 ```
 

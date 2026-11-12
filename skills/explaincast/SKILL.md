@@ -30,8 +30,7 @@ Any change to the narration or the beats needs a new take. `--mux-only` renders 
 | Subject | Flag | Know that |
 | --- | --- | --- |
 | Website, web app | `--url <url>` | Headless, so the Mac stays free. Start any server first, and log in from `setup`. |
-| Idea, architecture, process | `--file page.html` | `new.js` writes a starter page: one map of the parts, a headline per step, data moving between them. Build on it and drive it from the beats ([reference/idea-pages.md](reference/idea-pages.md)). |
-| Planned feature, integration, redesign | `--file page.html --screens` | Only UI, no map: `new.js` writes a starter of the product's own screens with the change in them, one at a time, what's new marked and acted out on the words ([reference/idea-pages.md](reference/idea-pages.md#screens)). |
+| Idea, architecture, process, planned feature | `--file page.html` | No box-and-arrow diagram: `new.js` writes a starter of the product's own screens. Draw each thing as the window it really is, one at a time, a headline per step, and act each step out on its words ([reference/idea-pages.md](reference/idea-pages.md)). |
 | Desktop app, terminal, editor | `--app "<name>"` | Experimental. Takes over the real pointer and keyboard: tell the user first and have them leave the Mac alone. |
 
 When a desktop app also has a web build or a demo mode, record that with `--url`: the same UI on sample data, headless.

@@ -5,57 +5,48 @@
 <title>{{title}}</title>
 <link rel="stylesheet" href="idea/stage.css">
 <style>
-/* Place every part once, over the whole 1100x620 stage. Parts never move after this. */
-#a { left: 36px; top: 228px; }
-#b { left: 430px; top: 228px; }
-#c { left: 824px; top: 116px; }
-#d { left: 824px; top: 360px; }
-#detail { left: 366px; top: 402px; width: 368px; height: 158px; }
+/* The product's own look: copy its colours from its source or its demo build. */
+.screen.product { --ui-bg: #ffffff; --ui-panel: #f6f7f9; --ui-ink: #111827; --ui-muted: #6b7280; --ui-line: #e5e7eb; --ui-accent: #2563eb; }
+/* A window fills the stage under the headline; .beside makes room for the phone. class="new" rings what a planned change adds. */
+#app { left: 44px; top: 116px; width: 1012px; height: 480px; }
+#app.beside { width: 716px; }
+#phone { left: 806px; top: 116px; width: 240px; height: 480px; }
 </style>
 </head>
 <body>
-<div class="eyebrow"></div>
 <h1 class="headline">{{title}}</h1>
-<nav class="chapters"><span>Overview</span><span data-eyebrow="1 · TODO">TODO</span><span>Recap</span></nav>
 
-<div class="node hidden" id="a" data-icon="monitor" data-title="TODO part" data-sub="TODO its role">
-  <div data-s="idle"><span class="muted">TODO what it does at rest</span></div>
-  <div data-s="busy"><span class="chip amber" id="value">TODO value</span><span class="muted">TODO what that value is</span></div>
-</div>
-<div class="node hidden" id="b" data-icon="server" data-title="TODO part" data-sub="TODO its role">
-  <div data-s="idle"><span class="muted">TODO</span></div>
-</div>
-<div class="node hidden" id="c" data-icon="database" data-title="TODO part" data-sub="TODO its role">
-  <div data-s="idle"><span class="muted">TODO</span></div>
-</div>
-<div class="node hidden" id="d" data-icon="mail" data-title="TODO part" data-sub="TODO its role">
-  <div data-s="idle"><span class="muted">TODO</span></div>
-</div>
-
-<div class="card hidden" id="detail">
-  <h5>TODO detail title</h5>
-  <div data-s="checks">
-    <div class="check" id="k1">TODO first check<small>TODO value</small></div>
+<div class="screen product" id="app" data-title="TODO the window's title">
+  <div class="ui-split">
+    <div class="ui-side"><div class="ui-item on">TODO a sidebar row</div><div class="ui-item">TODO another</div></div>
+    <div class="ui-main">
+      <b>TODO the view's title</b>
+      <div class="states ui-grow" id="result">
+        <div data-s="before"><span class="ui-muted">TODO what it shows at first</span></div>
+        <div data-s="after"><span>TODO what it shows once the control is used</span></div>
+      </div>
+      <div class="ui-row"><span class="ui-grow"></span><span class="ui-btn primary" id="control">TODO the control the line names</span></div>
+    </div>
   </div>
+</div>
+
+<div class="screen product phone" id="phone">
+  <div class="ui-main"><b>TODO the phone's view</b></div>
 </div>
 
 <script src="idea/stage.js"></script>
 <script>
-// Edges join parts by id. One that would cross a part takes explicit sides: { from: "bottom", to: "bottom" }.
-stage.edge("ab", "a", "b");
-stage.edge("bc", "b", "c");
-stage.edge("bd", "b", "d");
-stage.edge("da", "d", "a", { from: "bottom", to: "bottom" });
-
 // One step per cue word in beats.js, in the order the narration says them.
 stage.steps({
   first: async () => {
     stage.headline("TODO the point of this step, in one sentence");
-    stage.show("a", "b", "c", "d");
-    stage.focus("a", "b");
-    stage.state("a", "busy");
-    await stage.travel("ab", "value");
-    stage.mark("b", "lit");
+    await stage.open("app");
+    await stage.tap("control");
+    stage.state("result", "after");
+  },
+  phone: async () => {
+    stage.mark("app", "beside");
+    await stage.open("phone");
   },
 });
 </script>
