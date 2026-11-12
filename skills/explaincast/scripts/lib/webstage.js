@@ -64,6 +64,7 @@ class WebStage extends Stage {
     super(opts);
     this.page = page;
     this.pointer = { x: opts.origin.w * 0.56, y: opts.origin.h * 0.52 };
+    this.cheapLookups = true;
     this.noCursor = opts.noCursor;
     this.pageChecks = opts.pageChecks;
     this.dir = opts.dir;

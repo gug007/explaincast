@@ -40,6 +40,21 @@ test("an idea video starts from the Map page, with the kit beside it, and is ref
   assert.ok(errors.includes("the page page.html still has a TODO placeholder"), errors.join("\n"));
 });
 
+test("a planned feature starts from the Screens page: the product's UI and no map", (t) => {
+  const { dir, out } = scaffold(t, ["A video switch", ...IDEA, "--screens"]);
+  const page = fs.readFileSync(path.join(dir, "page.html"), "utf8");
+  assert.match(page, /class="screen product"/);
+  assert.doesNotMatch(page, /class="node|stage\.edge/);
+  assert.match(out, /a starter Screens page/);
+  const { video, beats } = load(dir);
+  const { errors } = checkVideo(video, beats, { dir });
+  assert.ok(errors.includes("the page page.html still has a TODO placeholder"), errors.join("\n"));
+});
+
+test("--screens without a page is refused", (t) => {
+  assert.throws(() => scaffold(t, ["A video switch", "--url", "http://localhost:3000", "--screens"]), (e) => e.status === 2 && /--screens goes with --file/.test(e.stderr));
+});
+
 test("a page that is already there is left alone", (t) => {
   const { root, dir } = scaffold(t, ["How caching works", ...IDEA]);
   fs.writeFileSync(path.join(dir, "page.html"), "<p>mine</p>");

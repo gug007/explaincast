@@ -18,8 +18,8 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 1. Turn the request into a short, clean title. Use the target and audience it names; otherwise pick the target that fits the subject (see Target) and default to `public`, asking only when the subject leaves the target unclear. Then run `${CLAUDE_SKILL_DIR}/scripts/new.js "<title>" <target flag> [--for <audience>] [--brand "<closing card>"] [--card "<short title>"] [--slug <slug>]`. It prints the video's folder.
 2. Learn the subject from its source or by using it, then write `video.json` and `beats.js`, and for an idea the page. [reference/beats.md](reference/beats.md) has every field and call.
 3. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --speak-only`. It voices the lines and prints the video's real length. Every later run reuses each clip whose text is unchanged.
-4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms.
-5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render. It records in real time and then renders, so give the command a timeout well past the length step 3 printed.
+4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms. A dry run on step 3's clips with no warnings is kept as the take.
+5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render. When the last run was a kept dry run and `video.json`, `beats.js`, the clips and an idea's page are unchanged, it renders that recording without recording again. Changes to `music`, `look`, `zooms`, `keys`, `speedUpWaits`, `cover`, `youtube`, `hide`, `title` or `brand` still count as unchanged. Otherwise it records in real time and then renders, so give the command a timeout well past the length step 3 printed. Pass `--fresh` to record anyway, as after a change to the app or its data since the dry run.
 6. Fix every warning, read `qa/report.json`, and look at `qa/sheet.jpg`, which has a tile for each line, card and zoom, and at `thumbnail.jpg`, whose moment the report's `thumbnail` names. A FAIL means the video isn't ready. A pass covers only what the report lists, so judge the tiles yourself.
 7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` and `.vtt` beside it, not burned in, with the script in `transcript.txt`.
 
@@ -31,6 +31,7 @@ Any change to the narration or the beats needs a new take. `--mux-only` renders 
 | --- | --- | --- |
 | Website, web app | `--url <url>` | Headless, so the Mac stays free. Start any server first, and log in from `setup`. |
 | Idea, architecture, process | `--file page.html` | `new.js` writes a starter page: one map of the parts, a headline per step, data moving between them. Build on it and drive it from the beats ([reference/idea-pages.md](reference/idea-pages.md)). |
+| Planned feature, integration, redesign | `--file page.html --screens` | Only UI, no map: `new.js` writes a starter of the product's own screens with the change in them, one at a time, what's new marked and acted out on the words ([reference/idea-pages.md](reference/idea-pages.md#screens)). |
 | Desktop app, terminal, editor | `--app "<name>"` | Experimental. Takes over the real pointer and keyboard: tell the user first and have them leave the Mac alone. |
 
 When a desktop app also has a web build or a demo mode, record that with `--url`: the same UI on sample data, headless.

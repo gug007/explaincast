@@ -186,6 +186,10 @@ const STILL_OUT = "out_color_matrix=bt601:out_range=pc";
 // eased in and out, laid over the picture after the zoom and under the cards.
 const KEY_FADE = { in: 0.12, out: 0.2 };
 
+// A still (canvas, shadow, mask) is decoded once and its frame repeated: an
+// image input looped with -loop 1 decodes the file again for every frame.
+const HOLD = "loop=loop=-1:size=1";
+
 // ffmpeg inputs and the video half of the filter graph. Input 0 is the take;
 // the caller appends the audio inputs after these. `keys` are key badges as
 // { startMs, ms } with `keyFiles` their pictures.
@@ -194,7 +198,7 @@ function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = []
   const parts = [];
   const opener = cards.find((c) => c.first && !c.hold);
   const spans = coverSpans(cards, totalMs);
-  const still = (file) => ["-framerate", String(FPS), "-loop", "1", "-i", file];
+  const still = (file) => ["-framerate", String(FPS), "-i", file];
   inputs.push(...still(canvas), ...still(shadow), ...still(mask));
   // The window in its place, except while a card has it at the cover position
   // (drawn above that card, below). A card later in the take gets the window
@@ -202,16 +206,23 @@ function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = []
   // split, its trim would hold every frame before it in the other branches (a
   // card half an hour in queued half an hour of full frames, and ffmpeg was
   // killed).
-  const home = spans.length ? `:enable='not(${spans.map((p) => `gte(t,${p.a.toFixed(3)})*lt(t,${p.b.toFixed(3)})`).join("+")})'` : "";
+  const away = spans.map((p) => `gte(t,${p.a.toFixed(3)})*lt(t,${p.b.toFixed(3)})`).join("+");
+  const home = spans.length ? `:enable='not(${away})'` : "";
   const shared = spans.map((span, i) => ({ span, i })).filter(({ span }) => span.a <= 0);
   const late = spans.map((span, i) => ({ span, i })).filter(({ span }) => span.a > 0);
   const copies = shared.length + 1;
+  // The canvas with the shadow in its place never changes, so the two are
+  // laid together once; while a card has the window, the canvas alone shows.
+  const shadows = shared.length ? `split=2[sh][sl];[sl]${HOLD},split=${shared.length}${shared.map(({ i }) => `[s${i + 1}c]`).join("")}` : "null[sh]";
+  const backdrop = spans.length
+    ? [`[1:v]split=2[cv][cva]`, `[cv][sh]overlay=x=0:y=0,${HOLD}[bgh]`, `[cva]format=yuva420p,${HOLD}[bga]`, `[bgh][bga]overlay=x=0:y=0:enable='${away}'[bg]`]
+    : [`[1:v][sh]overlay=x=0:y=0,${HOLD}[bg]`];
   parts.push(
     `[0:v]scale=${box.w}:${box.h}:${captureIn},format=rgba[w0]`,
-    `[3:v]format=gray[m]`,
+    `[3:v]format=gray,${HOLD}[m]`,
     `[w0][m]alphamerge${copies > 1 ? `,split=${copies}${shared.map(({ i }) => `[w${i + 1}c]`).join("")}` : ""}[w]`,
-    `[2:v]format=rgba${copies > 1 ? `,split=${copies}${shared.map(({ i }) => `[s${i + 1}c]`).join("")}` : ""}[s]`,
-    `[1:v][s]overlay=x=0:y=0${home}[bg]`,
+    `[2:v]format=rgba,${shadows}`,
+    ...backdrop,
     `[bg][w]overlay=x=${box.x}:y=${box.y}:eof_action=repeat${home}[v0]`,
   );
   spans.forEach((span, i) => parts.push(...coverLayer(span, { out, box }, `s${i + 1}c`, `w${i + 1}c`, `cv${i}`)));
@@ -264,14 +275,14 @@ function videoGraph({ out, canvas, shadow, mask, box, cards = [], cardFiles = []
   for (const { span, i } of late) {
     const at = span.a.toFixed(3);
     const len = (span.b - span.a).toFixed(3);
-    const from = (file) => ["-framerate", String(FPS), "-loop", "1", "-t", len, "-i", file];
-    inputs.push("-ss", at, "-t", len, "-i", take, ...from(shadow), ...from(mask));
+    inputs.push("-ss", at, "-t", len, "-i", take, ...still(shadow), ...still(mask));
     const shift = `setpts=PTS-STARTPTS+${at}/TB`;
+    const held = `${HOLD},trim=duration=${len}`;
     parts.push(
       `[${input}:v]scale=${box.w}:${box.h}:${captureIn},format=rgba[w${i + 1}t]`,
-      `[${input + 2}:v]format=gray[m${i + 1}t]`,
+      `[${input + 2}:v]format=gray,${held}[m${i + 1}t]`,
       `[w${i + 1}t][m${i + 1}t]alphamerge,${shift}[w${i + 1}c]`,
-      `[${input + 1}:v]format=rgba,${shift}[s${i + 1}c]`,
+      `[${input + 1}:v]format=rgba,${held},${shift}[s${i + 1}c]`,
     );
     input += 3;
   }

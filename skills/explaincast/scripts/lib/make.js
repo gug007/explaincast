@@ -13,7 +13,7 @@ const { videoGraph, frameAssets, frameBox, editZooms, CAPTURE_IN, SCREENCAST_IN 
 const { keyBadges, renderKeyBadges } = require("./keycaps");
 const { makeVoice } = require("./voice");
 const { DEFAULT_BED, RATE, soundtrack } = require("./mix");
-const { beginTake, failTake, promote, finishDryTake } = require("./takes");
+const { beginTake, failTake, promote, finishDryTake, takeKey, dryTakeFor, useDryTake } = require("./takes");
 const { exitOnSignals, runTeardown, onTeardown } = require("./teardown");
 const { fitLines } = require("./fit");
 const { lintDir, youtubeTodo } = require("./lint");
@@ -67,7 +67,22 @@ const MEDIA = ["record.mkv", "timeline.json", `${slug}.mp4`, `${slug}.srt`, `${s
 // The current take and its render.
 const P = { raw: path.join(DIR, "record.mkv"), timeline: path.join(DIR, "timeline.json"), mp4: path.join(DIR, `${slug}.mp4`) };
 
+// A clean dry run on the real clips, made from the same script, clips and
+// page, is the take this one would record again; the render uses it as it is.
+const SAME = `the same ${video.target.file ? "video.json, beats.js, clips and page" : "video.json, beats.js and clips"}`;
+function useDryRun(key) {
+  const kept = dryTakeFor(DIR, key);
+  if (!kept) return false;
+  const min = Math.round((Date.now() - fs.statSync(kept.timeline).mtimeMs) / 60000);
+  const { archived } = useDryTake(DIR, kept, MEDIA);
+  console.log(`take ${kept.id}: the dry run ${min ? `${min} min ago` : "just now"} recorded ${SAME} with no warnings, so it is the take (--fresh records a new one, as after a change to the app or its data)`);
+  if (archived) console.log(`the previous take moved to ${archived}`);
+  return true;
+}
+
 async function record(lines) {
+  const key = takeKey(DIR, video, lines);
+  if (!dry && !o.fresh && useDryRun(key)) return;
   const beats = require(path.join(DIR, "beats.js"));
   const framesDir = path.join(DIR, "frames");
   fs.rmSync(framesDir, { recursive: true, force: true });
@@ -87,10 +102,17 @@ async function record(lines) {
   }
   interrupted();
   timeline.take = take.id;
+  // Every line on its real clip and no warnings: the dry run is the take.
+  const keep = dry && lines.every((l) => l.silent || l.wav) && !timeline.warnings?.length;
+  if (keep) timeline.reuse = key;
   fs.writeFileSync(take.timeline, JSON.stringify(timeline, null, 2));
   console.log(`recorded ${(timeline.totalMs / 1000).toFixed(1)}s (${VOICE})`);
   for (const w of timeline.warnings || []) console.log(`  warning (${w.kind}${w.line ? `, line ${w.line}` : ""}): ${w.message}`);
-  if (dry) return finishDryTake(take);
+  if (dry) {
+    finishDryTake(take, { keep });
+    if (keep) console.log(`dry run kept: the next take renders this recording instead of recording again, while it has ${SAME}`);
+    return;
+  }
   const archived = promote(DIR, take, MEDIA);
   if (archived) console.log(`the previous take moved to ${archived}`);
 }

@@ -1,6 +1,7 @@
 // stage.js: the Map kit for explaincast idea pages. The parts sit on one stage
 // and never move; each step changes the headline, the focus, what each part
-// holds, and what travels between them. Calls: reference/idea-pages.md.
+// holds, and what travels between them. A Screens page shows a product's own UI
+// instead, one screen at a time. Calls: reference/idea-pages.md.
 // Icons are Lucide (ISC licence, idea/LICENSE-lucide.txt).
 (function (root) {
   const ICONS = {
@@ -98,6 +99,7 @@
   const NS = "http://www.w3.org/2000/svg";
   const KINDS = ["amber", "indigo", "sky", "green", "red", "violet", "slate"];
   const SLOT_MIN = 72;
+  const UI_BOX = ".ui-field, .ui-btn, .ui-item, .ui-tag, .ui-switch, .ui-card, .ui-bar, .ui-side, .ui-main, .sv";
   const SAMPLES = 40;
   const edges = new Map();
   const badges = new Map();
@@ -150,6 +152,23 @@
     });
   }
 
+  // A screen gets its window's chrome (a title bar, or a phone's status bar)
+  // above a view that holds the page's markup for it.
+  function buildScreen(s) {
+    const view = document.createElement("div");
+    view.className = "sv";
+    view.append(...s.childNodes);
+    const bar = document.createElement("div");
+    bar.className = "tb";
+    if (s.classList.contains("phone")) bar.innerHTML = "<span>9:41</span><em></em>";
+    else {
+      bar.innerHTML = "<i></i><i></i><i></i><span></span>";
+      bar.querySelector("span").textContent = s.dataset.title || "";
+    }
+    s.append(bar, view);
+    makeSlot(view);
+  }
+
   function build() {
     if (built) return;
     built = true;
@@ -164,6 +183,23 @@
       makeSlot(n);
     });
     document.querySelectorAll(".card").forEach(makeSlot);
+    document.querySelectorAll(".screen").forEach(buildScreen);
+    document.querySelectorAll(".states").forEach(makeSlot);
+    document.querySelectorAll(".ui-video").forEach((v) => {
+      v.insertAdjacentHTML("beforeend", '<span class="vp"></span><span class="vbar"><i></i></span>');
+      if (v.dataset.time) {
+        const t = document.createElement("span");
+        t.className = "vt";
+        t.textContent = v.dataset.time;
+        v.appendChild(t);
+      }
+    });
+    document.querySelectorAll(".new").forEach((n) => {
+      const tag = document.createElement("span");
+      tag.className = "newtag";
+      tag.textContent = n.dataset.new || "New";
+      n.appendChild(tag);
+    });
     document.querySelectorAll("i[data-icon]").forEach((i) => { i.outerHTML = icon(i.dataset.icon); });
     const h = document.querySelector(".headline");
     if (h && !h.querySelector("span")) {
@@ -222,7 +258,7 @@
   const mark = (id, cls, on = true) => el(id).classList.toggle(cls, on);
 
   function state(id, name) {
-    const slot = el(id).querySelector(".slot");
+    const slot = el(id).querySelector(":scope > .slot, :scope > .sv > .slot");
     if (!slot) throw new Error(`stage: #${id} has no [data-s] states`);
     const states = [...slot.children];
     if (!states.some((s) => s.dataset.s === name)) throw new Error(`stage: #${id} has no state "${name}"`);
@@ -342,6 +378,56 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  const opened = new Set();
+  const screenOf = (id) => {
+    const s = el(id);
+    if (!s.classList.contains("screen")) throw new Error(`stage: #${id} is not a .screen`);
+    return s;
+  };
+
+  const RISE = [{ opacity: 0, transform: "translateY(18px) scale(.97)" }, { opacity: 1, transform: "none" }];
+
+  // Opens screens; resolves once they are open.
+  function open(...ids) {
+    return Promise.all(ids.map((id) => {
+      const s = screenOf(id);
+      if (opened.has(id)) return null;
+      opened.add(id);
+      s.getAnimations().forEach((a) => a.cancel());
+      s.classList.remove("hidden");
+      s.classList.add("open");
+      return s.animate(RISE, { duration: 600, easing: "cubic-bezier(.22, .8, .2, 1)" }).finished.catch(() => {});
+    }));
+  }
+
+  // Closes screens; close() closes every open one.
+  function close(...ids) {
+    const which = (ids.length ? ids : [...opened]).filter((id) => screenOf(id) && opened.delete(id));
+    return Promise.all(which.map((id) => {
+      const s = el(id);
+      const a = s.animate(RISE, { duration: 420, easing: "cubic-bezier(.45, 0, .25, 1)", direction: "reverse", fill: "forwards" });
+      return a.finished.then(() => { s.classList.remove("open"); a.cancel(); }, () => {});
+    }));
+  }
+
+  // A tap on a control: a ripple from its centre and a short press.
+  function tap(id) {
+    const target = el(id);
+    const r = target.getBoundingClientRect();
+    const dot = document.createElement("span");
+    dot.className = "tap";
+    dot.style.left = `${r.left + r.width / 2}px`;
+    dot.style.top = `${r.top + r.height / 2}px`;
+    document.body.appendChild(dot);
+    target.classList.add("press");
+    setTimeout(() => target.classList.remove("press"), 220);
+    const a = dot.animate(
+      [{ transform: "translate(-50%, -50%) scale(.35)", opacity: 0.9 }, { transform: "translate(-50%, -50%) scale(1.5)", opacity: 0 }],
+      { duration: 620, easing: "cubic-bezier(.22, .8, .2, 1)" },
+    );
+    return a.finished.then(() => dot.remove(), () => dot.remove());
+  }
+
   // What a reviewer would flag on screen right now, each issue once per take.
   // The recorder calls it once at the end of every line.
   function lint() {
@@ -355,6 +441,7 @@
       }
       return true;
     };
+    const range = document.createRange();
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let t = walker.nextNode(); t; t = walker.nextNode()) {
       const text = t.textContent.trim();
@@ -364,10 +451,17 @@
       if (size < 15) issues.push(`"${text.slice(0, 40)}" is ${size}px; stage text needs 15px or more to stay readable`);
       const r = p.getBoundingClientRect();
       if (r.right > W + 1 || r.bottom > H + 1 || r.left < -1 || r.top < -1) issues.push(`"${text.slice(0, 40)}" runs off the stage`);
+      const box = p.closest(".screen") && !p.closest(".newtag") && p.closest(UI_BOX);
+      if (box) {
+        range.selectNodeContents(t);
+        const tr = range.getBoundingClientRect(), br = box.getBoundingClientRect();
+        if (tr.right > br.right + 1 || tr.bottom > br.bottom + 1 || tr.left < br.left - 1) issues.push(`"${text.slice(0, 40)}" runs out of its ${box.classList[0]} in #${p.closest(".screen").id}; shorten it or give the box room`);
+      }
     }
-    const boxes = [...document.querySelectorAll(".node, .card")].filter(shown);
+    const boxes = [...document.querySelectorAll(".node, .card, .screen")].filter(shown);
     for (const b of boxes) {
-      if (b.scrollWidth > b.clientWidth + 2 || b.scrollHeight > b.clientHeight + 2) issues.push(`#${b.id || b.className} has more content than fits in it`);
+      const inner = b.querySelector(":scope > .sv") || b;
+      if (inner.scrollWidth > inner.clientWidth + 2 || inner.scrollHeight > inner.clientHeight + 2) issues.push(`#${b.id || b.className} has more content than fits in it`);
     }
     const rects = boxes.map((b) => ({ b, r: b.getBoundingClientRect() }));
     const overlap = (r, s, pad = 4) => r.left + pad < s.right && s.left + pad < r.right && r.top + pad < s.bottom && s.top + pad < r.bottom;
@@ -375,6 +469,10 @@
       for (let j = i + 1; j < rects.length; j++) if (overlap(rects[i].r, rects[j].r)) issues.push(`#${rects[i].b.id} and #${rects[j].b.id} overlap`);
     const head = document.querySelector(".headline span:not(.out)"), chaps = document.querySelector(".chapters");
     if (head && chaps && overlap(head.getBoundingClientRect(), chaps.getBoundingClientRect(), 0)) issues.push(`the headline "${head.textContent}" runs into the chapters; shorten it`);
+    const top = [document.querySelector(".headline"), chaps].filter(Boolean).map((n) => n.getBoundingClientRect());
+    for (const { b, r } of rects) {
+      if (b.classList.contains("screen") && top.some((t) => overlap(r, t, 0))) issues.push(`#${b.id} runs into the headline; start it below ${Math.ceil(Math.max(...top.map((t) => t.bottom)))} points`);
+    }
     const live = [...edges.values()].filter(isLive);
     for (const e of live) {
       const bb = e.path.getBBox();
@@ -417,5 +515,5 @@
     else start();
   }
 
-  root.stage = { steps, edge, show, hide, focus, mark, state, headline, chapter, flow, travel, badge, type, sleep, lint };
+  root.stage = { steps, edge, show, hide, focus, mark, state, headline, chapter, flow, travel, badge, type, sleep, open, close, tap, lint };
 })(typeof window !== "undefined" ? window : globalThis);

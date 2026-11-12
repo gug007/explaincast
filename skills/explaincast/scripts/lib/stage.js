@@ -35,6 +35,7 @@ class Stage extends Timing {
     this.frameNo = 0;
     this.cards = [];
     this.zooms = [];
+    this.pending = [];
     this.presses = [];
     this.warnings = [];
     this.covered = false;
@@ -96,14 +97,36 @@ class Stage extends Timing {
   }
 
   // Push the picture in on `sel` (compose.js does the actual zoom); it stays
-  // until zoomOut.
+  // until zoomOut. Where looking the target up again is cheap, it is measured
+  // again once the zoom lands, so a target still moving as the zoom starts
+  // (a panel sliding in, an idea page's screen opening) stays in the frame.
   async zoom(sel, opts = {}) {
-    const r = await this.rectOf(sel);
     const at = opts.at || [0.5, 0.5];
-    const o = this.outPoint({ x: r.x + r.w * at[0], y: r.y + r.h * at[1] });
-    const tl = this.outPoint(r);
-    const br = this.outPoint({ x: r.x + r.w, y: r.y + r.h });
-    await this.recordZoom(opts.scale ?? 1.8, o.x, o.y, opts, { sel: label(sel), at, rect: { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y } });
+    const aim = (r) => {
+      const o = this.outPoint({ x: r.x + r.w * at[0], y: r.y + r.h * at[1] });
+      const tl = this.outPoint(r);
+      const br = this.outPoint({ x: r.x + r.w, y: r.y + r.h });
+      return { cx: o.x, cy: o.y, rect: { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y } };
+    };
+    const first = aim(await this.rectOf(sel));
+    const z = await this.recordZoom(opts.scale ?? 1.8, first.cx, first.cy, opts, { sel: label(sel), at, rect: first.rect });
+    if (this.cheapLookups) this.pending.push(this.reaim(z, sel, aim));
+  }
+
+  async reaim(z, sel, aim) {
+    await sleep(z.ms);
+    const r = await this.locate(sel).catch(() => null);
+    if (!r) return;
+    const now = aim(r);
+    const cx = Math.round(now.cx), cy = Math.round(now.cy);
+    if (Math.hypot(cx - z.cx, cy - z.cy) < 4) return;
+    this.log(`zoom ${z.id}: ${label(sel)} moved while it zoomed, so it lands at ${cx},${cy} instead of ${z.cx},${z.cy}`);
+    Object.assign(z, { cx, cy, rect: Object.fromEntries(Object.entries(now.rect).map(([k, v]) => [k, Math.round(v)])) });
+  }
+
+  // Waits for the work a beat left running, such as a zoom being measured again.
+  async settle() {
+    await Promise.all(this.pending.splice(0));
   }
 
   async zoomOut(opts = {}) {

@@ -98,6 +98,7 @@ async function recordTake({ video, dir, lines, beats, raw, framesDir, errorShot,
     await stage.hold(leadMs);
     const timeline = await runBeats(stage, lines, beats, t0, { gapMs, tailMs, progress, check });
     const totalMs = Date.now() - t0;
+    await stage.settle();
     stopping = true;
     await capture.stop();
     await rec.stop(totalMs);

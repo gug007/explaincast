@@ -365,7 +365,7 @@ class Timing {
     const lineId = this.line?.id || "lead";
     const n = this.zooms.filter((z) => z.id?.startsWith(`${lineId}#`)).length + 1;
     const rect = target.rect && Object.fromEntries(Object.entries(target.rect).map(([k, v]) => [k, Math.round(v)]));
-    this.zooms.push({
+    const zoom = {
       id: `${lineId}#${n}`,
       startMs: Date.now() - this.t0,
       ms,
@@ -373,8 +373,10 @@ class Timing {
       cx: Math.round(cx),
       cy: Math.round(cy),
       ...(target.sel && { sel: target.sel, at: target.at || [0.5, 0.5], rect }),
-    });
+    };
+    this.zooms.push(zoom);
     this.log(`zoom ${scale === 1 ? "out" : `${scale}x at ${Math.round(cx)},${Math.round(cy)}`} over ${ms}ms`);
+    return zoom;
   }
 }
 

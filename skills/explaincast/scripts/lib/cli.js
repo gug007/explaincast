@@ -8,6 +8,7 @@ const FLAGS = {
   "no-audio": "dry run: no voice, no render; frames/ shows each line's end",
   "mux-only": "render the last take again without recording, after a music or zooms change",
   respeak: "voice every line again, even where its text is unchanged",
+  fresh: "record a new take even where the last dry run would do as it is",
 };
 
 const usage = (script) => `usage: ${script} <video folder or slug> [flags]\n${Object.entries(FLAGS).map(([k, v]) => `  --${k.padEnd(11)} ${v}`).join("\n")}`;

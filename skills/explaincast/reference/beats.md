@@ -41,7 +41,7 @@ The runner waits for each line's clip plus a short gap before the next beat. A b
 | `s.drag(from, to, { at, dropAt, cue, ms, dragMs, hold, settle })` | Presses on `from`, carries it to `to` and lets go. `at` aims inside `from`, `dropAt` inside `to`; `cue` lands the pick-up on its word. The real pointer moves in steps, so drag-and-drop code sees a drag |
 | `s.type(text, { words, after })` | `words: true` types in bursts, for long text |
 | `s.press("Enter", { cue, badge })`, `s.keys("cmd+k", { cue, badge })` | Each press shows its keys as a badge under the window for a moment (`⌘ K`); `badge: false` leaves one out, video.json `"keys": false` all of them. `cue` presses on that word |
-| `s.zoom(sel, { scale, at, ms, cue })`, `s.zoomOut({ ms, cue })` | 1.6–2 for a small control; stays until zoomed out, and a second zoom pans from the first. The crop stops at the canvas, so a target near an edge sits off-centre. Use a few per video |
+| `s.zoom(sel, { scale, at, ms, cue })`, `s.zoomOut({ ms, cue })` | 1.6–2 for a small control; stays until zoomed out, and a second zoom pans from the first. The crop stops at the canvas, so a target near an edge sits off-centre. A web take aims where the target is once the zoom lands, so it can zoom on something still sliding in. Use a few per video |
 | `s.card(title, { hold, until, ms })` | Title left; the window's left 58% live at its right, so whatever a beat does behind a card shows there. `until: "<cue>"` ends it on that word |
 | `s.hideCursor()`, `s.showCursor()` | A card shows the cursor again when it ends |
 | `s.waitFor(sel, timeout)`, `s.waitGone(sel, timeout)`, `s.until(fn, { timeout, label })` | `until` warns instead of stopping when it times out |
