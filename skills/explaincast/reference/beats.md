@@ -7,6 +7,7 @@
 | `title` | The video's title |
 | `for` | `public`, `client` or `me` |
 | `target` | `{ type: "web", url \| file, cursor, colorScheme, clock, mock }` or `{ type: "window", app \| launch }`; both take `width`, `height` (default 1100×620 points, at most 1200×680). `file` is relative to the folder. `cursor: false` hides the drawn pointer. `launch` is `[command, ...args]`: a copy of its own, ended after the take, where `app` uses the running app's largest window. `clock` (web) is when the page's time starts, as in `"2026-03-14T10:00"` on this Mac's clock; it runs on from there, the same in every take. `mock` (web) answers requests instead of the server: `{ "**/api/user": "fixtures/user.json", "https://api.example.com/plan": { "name": "Team" } }`, a file from the folder or the JSON itself, and the first pattern that matches wins |
+| `treatment` | An idea video's plan, written before its page: `{ subject, look, scenes: [{ id, shows }] }`. Every scene it names is a `<section class="scene" id>` in the page ([idea-pages.md](idea-pages.md)) |
 | `narration` | `[{ id, text, chapter? }]`, one beat per id, in order. A line without `text` is a silent pause of `ms`. `chapter` names a chapter from that line on |
 | `brand` | The closing card's words; the end is `{ "id": "outro", "ms": 3200 }` with `s.card(brand, { hold: true })` |
 | `look` | A brand's look for the cards, the thumbnail and the canvas behind the window: `{ canvas, ink, font, logo, pools }`, every field optional. Without it, explaincast's own (warm canvas, serif, pools) for every audience, client videos included. `canvas` and `ink` are colours (`"#0e2a3c"`, `rgb()`, `hsl()`); `font` is a `.woff2`, `.woff`, `.ttf` or `.otf` file, or the name of a font installed on the Mac; `logo` is an `.svg`, `.png`, `.jpg` or `.webp` set above the words of a held card, the closing one; `pools` is `true`, `false` or one to three colours, and a brand's own `canvas` is flat unless it asks for them. Paths start at the video folder. `--mux-only` applies a change |
@@ -54,7 +55,7 @@ At the end of every line, a web take warns when the pointer rests on a small con
 
 ## Idea pages
 
-`new.js --file page.html` writes a starter page of the product's own screens, with its kit in `idea/`, and a beats.js whose `go()` runs a step of the page. Each beat calls a step on its word, and the take checks the page itself at the end of every line. [idea-pages.md](idea-pages.md) has the look, the markup and every `stage` call.
+`new.js --file page.html` writes a `treatment` to fill in in `video.json`, an empty stage to draw its scenes on, with the kit in `idea/`, and a beats.js whose `go()` runs a step of the page. Each beat calls a step on its word, and the take checks the page itself at the end of every line. [idea-pages.md](idea-pages.md) has the treatment, the markup and every `stage` call.
 
 ```js
 async send(s) {

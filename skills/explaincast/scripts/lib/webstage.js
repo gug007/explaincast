@@ -67,14 +67,18 @@ class WebStage extends Stage {
     this.cheapLookups = true;
     this.noCursor = opts.noCursor;
     this.pageChecks = opts.pageChecks;
+    this.cardsSeen = 0;
     this.dir = opts.dir;
   }
 
   // An idea page built on the kit reports what it would flag on screen
-  // (idea/stage.js lint); every page gets the pointer check.
+  // (idea/stage.js lint); every page gets the pointer check. A line that showed
+  // a card had the page covered, so the page need not have changed during it.
   async endLine() {
     if (this.pageChecks) {
-      for (const issue of await this.page.evaluate(() => window.stage?.lint?.() || [])) this.warn("page", issue);
+      const state = { line: this.line?.id || null, covered: this.covered || this.cards.length !== this.cardsSeen };
+      this.cardsSeen = this.cards.length;
+      for (const issue of await this.page.evaluate((o) => window.stage?.lint?.(o) || [], state)) this.warn("page", issue);
     }
     await this.checkPointer();
   }

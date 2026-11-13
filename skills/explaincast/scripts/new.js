@@ -2,8 +2,8 @@
 // new.js "<title>" (--url <url> | --file <page.html> | --app <name>) [--for public|client|me]
 //        [--slug <slug>] [--card "<short title>"] [--brand "<closing card>"] [--force]
 // Starts ~/Movies/explaincast/<slug>/ (EXPLAINCAST_DIR) with video.json and
-// beats.js, and for an idea a starter page of the product's own screens, with
-// the kit beside it in idea/.
+// beats.js, and for an idea a "treatment" to write in video.json and an empty
+// stage to draw its scenes on, with the kit beside it in idea/.
 // The nearest .explaincast.json up from the current folder supplies the
 // project's defaults: target, for, brand, look, hide, pronounce, heard, voice,
 // style.
@@ -19,7 +19,13 @@ const USAGE = 'usage: new.js "<title>" (--url <url> | --file <page.html> | --app
 const DEFAULT_KEYS = ["target", "for", "brand", "look", "hide", "pronounce", "heard", "voice", "style"];
 const MAX_SLUG = 60;
 const KIT = path.join(__dirname, "..", "idea");
-const KIT_FILES = ["stage.css", "stage.js", "LICENSE-lucide.txt"];
+const KIT_FILES = ["stage.css", "stage.js", "windows.css", "LICENSE-lucide.txt"];
+// What an idea video is made of, written before its page: lint.js holds the page to it.
+const TREATMENT = {
+  subject: "TODO: the real things this subject is made of, in the viewer's words.",
+  look: "TODO: where the colours and type come from: the product, the project's look, or the subject's own world.",
+  scenes: [{ id: "TODO", shows: "TODO: what is drawn, as the thing it really is." }],
+};
 
 function fail(message) {
   console.error(message);
@@ -91,6 +97,7 @@ const video = {
   for: audience,
   target,
   ...(brand && { brand }),
+  ...(idea && { treatment: TREATMENT }),
   narration,
   ...(audience === "public" && { youtube: { hook: ["TODO: what the video shows.", "TODO: who it is for."], learn: ["TODO"], tags: ["TODO"] } }),
 };
@@ -109,7 +116,7 @@ const beats = [
 fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, "video.json"), `${JSON.stringify(video, null, 2)}\n`);
 fs.writeFileSync(path.join(dir, "beats.js"), beats);
-// A page that is already there is the user's: only a new one gets the starter and the kit.
+// A page that is already there is the user's: only a new one gets the empty stage and the kit.
 const page = idea && path.resolve(dir, target.file);
 if (page && !fs.existsSync(page)) {
   const kit = path.join(path.dirname(page), "idea");
@@ -117,6 +124,6 @@ if (page && !fs.existsSync(page)) {
   for (const f of KIT_FILES) fs.copyFileSync(path.join(KIT, f), path.join(kit, f));
   const html = fs.readFileSync(path.join(KIT, "page.html"), "utf8").replaceAll("{{title}}", title.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]));
   fs.writeFileSync(page, html);
-  console.log(`page ${page}: a starter page of screens; build on it (reference/idea-pages.md)`);
+  console.log(`page ${page}: an empty stage; write video.json "treatment" first, then draw its scenes (reference/idea-pages.md)`);
 }
 console.log(dir);

@@ -26,19 +26,34 @@ const load = (dir) => {
 
 const IDEA = ["--file", "page.html", "--for", "me"];
 
-test("an idea video starts from a page of screens, with the kit beside it, and is refused until its placeholders are gone", (t) => {
+test("an idea video starts from a treatment and an empty stage, with the kit beside it, and is refused until both are written", (t) => {
   const { dir, out } = scaffold(t, ["How <caching> works", ...IDEA]);
   const page = fs.readFileSync(path.join(dir, "page.html"), "utf8");
   assert.match(page, /<title>How &lt;caching&gt; works<\/title>/);
   assert.match(page, /idea\/stage\.js/);
-  for (const f of ["stage.css", "stage.js", "LICENSE-lucide.txt"]) assert.ok(fs.existsSync(path.join(dir, "idea", f)), f);
-  assert.match(page, /class="screen product"/);
-  assert.match(out, /a starter page of screens/);
+  for (const f of ["stage.css", "stage.js", "windows.css", "LICENSE-lucide.txt"]) assert.ok(fs.existsSync(path.join(dir, "idea", f)), f);
+  assert.doesNotMatch(page, /class="(screen|ui-)/, "the stage starts with nothing drawn on it");
+  assert.match(out, /an empty stage/);
   const { video, beats } = load(dir);
   assert.deepStrictEqual(video.target, { type: "web", file: "page.html", cursor: false });
   assert.match(beats.first.toString(), /go\(s, "first"\)/);
   const { errors } = checkVideo(video, beats, { dir });
   assert.ok(errors.includes("the page page.html still has a TODO placeholder"), errors.join("\n"));
+  assert.ok(errors.some((e) => /"treatment" still has a TODO placeholder/.test(e)), errors.join("\n"));
+});
+
+test("the page draws every scene its treatment names", (t) => {
+  const { dir } = scaffold(t, ["How caching works", ...IDEA]);
+  const { video, beats } = load(dir);
+  video.treatment = { subject: "A page, a stopwatch and a shelf of saved copies.", look: "The shop's own green and its rounded type.", scenes: [{ id: "race", shows: "Two stopwatches, one per visit." }, { id: "shelf", shows: "The saved copy on a shelf." }] };
+  const page = (body) => fs.writeFileSync(path.join(dir, "page.html"), `<script src="idea/stage.js"></script>${body}`);
+  page('<section class="scene wide" id="race"></section><div class="scenery" id="shelf"></div><section class="scene" id="extra"></section>');
+  const first = checkVideo(video, beats, { dir });
+  assert.ok(first.errors.includes('treatment scene "shelf" is not in the page; draw it as <section class="scene" id="shelf">'), first.errors.join("\n"));
+  assert.ok(first.warnings.includes('the page has a scene "extra" that the treatment does not list'), first.warnings.join("\n"));
+  page('<section class="scene" id="race"></section><section id="shelf" class="scene"></section>');
+  const second = checkVideo(video, beats, { dir });
+  assert.ok(!second.errors.some((e) => /treatment/.test(e)) && !second.warnings.some((w) => /scene/.test(w)), [...second.errors, ...second.warnings].join("\n"));
 });
 
 test("a page that is already there is left alone", (t) => {

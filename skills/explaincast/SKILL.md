@@ -16,7 +16,7 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 ## Workflow
 
 1. Turn the request into a short, clean title. Use the target and audience it names; otherwise pick the target that fits the subject (see Target) and default to `public`, asking only when the subject leaves the target unclear. Then run `${CLAUDE_SKILL_DIR}/scripts/new.js "<title>" <target flag> [--for <audience>] [--brand "<closing card>"] [--card "<short title>"] [--slug <slug>]`. It prints the video's folder.
-2. Learn the subject from its source or by using it, then write `video.json` and `beats.js`, and for an idea the page. [reference/beats.md](reference/beats.md) has every field and call.
+2. Learn the subject from its source or by using it, then write `video.json` and `beats.js`. For an idea, write `video.json`'s `treatment` first (what the subject is made of, its look, its scenes), then draw those scenes in the page. [reference/beats.md](reference/beats.md) has every field and call.
 3. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --speak-only`. It voices the lines and prints the video's real length. Every later run reuses each clip whose text is unchanged.
 4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms. A dry run on step 3's clips with no warnings is kept as the take.
 5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render. When the last run was a kept dry run and `video.json`, `beats.js`, the clips and an idea's page are unchanged, it renders that recording without recording again. Changes to `music`, `look`, `zooms`, `keys`, `speedUpWaits`, `cover`, `youtube`, `hide`, `title` or `brand` still count as unchanged. Otherwise it records in real time and then renders, so give the command a timeout well past the length step 3 printed. Pass `--fresh` to record anyway, as after a change to the app or its data since the dry run.
@@ -30,7 +30,7 @@ Any change to the narration or the beats needs a new take. `--mux-only` renders 
 | Subject | Flag | Know that |
 | --- | --- | --- |
 | Website, web app | `--url <url>` | Headless, so the Mac stays free. Start any server first, and log in from `setup`. |
-| Idea, architecture, process, planned feature | `--file page.html` | No box-and-arrow diagram: `new.js` writes a starter of the product's own screens. Draw each thing as the window it really is, one at a time, a headline per step, and act each step out on its words ([reference/idea-pages.md](reference/idea-pages.md)). |
+| Idea, architecture, process, planned feature | `--file page.html` | No template and no box-and-arrow diagram: `new.js` writes an empty stage and a `treatment` to fill in. Every video gets scenes drawn for its own subject, each as the thing it really is (a receipt, a calendar, the product's screen), in a look taken from that subject, and every line acts something out in them ([reference/idea-pages.md](reference/idea-pages.md)). |
 | Desktop app, terminal, editor | `--app "<name>"` | Experimental. Takes over the real pointer and keyboard: tell the user first and have them leave the Mac alone. |
 
 When a desktop app also has a web build or a demo mode, record that with `--url`: the same UI on sample data, headless.
@@ -52,6 +52,7 @@ A project can set defaults in `.explaincast.json` at its root: `target`, `for`, 
 - Say a control's name, then click it on that word (`cue`). A beat that runs past its word warns, and a late click reads as a mistake.
 - Rest the pointer beside what a line is about, never on it. A pointer on a small target hides it. A web take warns when it rests on a control the line names; a window take can't tell.
 - Check every claim the narration makes against the real product. Sample data or a demo build can behave differently.
+- Write for the person who will use the thing, not the one who built it: what they do, what they see and what they get, in plain words. Say how it works underneath only when the request asks for the internals.
 - Keep each video standalone: no teasers, and no YAML, config or CLI detail unless that is the topic.
 - The checks flag the user's own details, any email address and `hide` terms, but know no other names, and nothing is blurred. For client work, record demo or staging data, or answer the app's requests with saved data (`mock`), and list the client's sensitive terms in `hide`. A web video that shows dates or "3 minutes ago" sets `clock`, so every take shows the same.
 - Narration goes to OpenAI. Check before voicing anything confidential.

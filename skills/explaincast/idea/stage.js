@@ -1,6 +1,6 @@
-// stage.js: the kit for explaincast idea pages. A page shows the product's own
-// screens, one at a time; each step changes the headline and acts on the
-// screen that is open. Calls: reference/idea-pages.md.
+// stage.js: the runtime for explaincast idea pages. A page draws its own
+// scenes; each step changes the headline and acts on the scene that is showing.
+// Calls: reference/idea-pages.md.
 // Icons are Lucide (ISC licence, idea/LICENSE-lucide.txt).
 (function (root) {
   const ICONS = {
@@ -46,13 +46,18 @@
     zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   };
 
-  if (typeof module === "object" && module.exports) module.exports = { ICONS };
+  // What stage.count() shows on the way to `to`: `places` decimals, or as many as `to` has.
+  function countText(value, to, { prefix = "", suffix = "", places = (String(to).split(".")[1] || "").length } = {}) {
+    return prefix + value.toLocaleString("en-US", { minimumFractionDigits: places, maximumFractionDigits: places }) + suffix;
+  }
+
+  if (typeof module === "object" && module.exports) module.exports = { ICONS, countText };
   if (typeof document === "undefined") return;
 
   const UI_BOX = ".ui-field, .ui-btn, .ui-item, .ui-tag, .ui-switch, .ui-card, .ui-bar, .ui-side, .ui-main, .sv";
   const reported = new Set();
   const failures = [];
-  let built = false, emptyLines = 0;
+  let built = false, emptyLines = 0, lastLook = null;
 
   const el = (id) => {
     const found = document.getElementById(id);
@@ -199,6 +204,64 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Shows one scene and takes the others away; resolves once it is in.
+  function scene(id) {
+    const next = el(id);
+    if (!next.classList.contains("scene")) throw new Error(`stage: #${id} is not a .scene`);
+    document.querySelectorAll(".scene.on").forEach((s) => s !== next && s.classList.remove("on"));
+    next.classList.add("on");
+    return sleep(550);
+  }
+
+  // Slides an element until its centre is on another element's centre or on
+  // [x, y] in stage points; move(id) slides it home. Resolves on arrival.
+  const moved = new WeakMap();
+  function move(id, to, { ms = 700 } = {}) {
+    const item = el(id);
+    const from = moved.get(item) || [0, 0];
+    let goal = [0, 0];
+    if (to != null) {
+      const r = item.getBoundingClientRect();
+      const t = Array.isArray(to) ? { left: to[0], top: to[1], width: 0, height: 0 } : el(to).getBoundingClientRect();
+      goal = [from[0] + t.left + t.width / 2 - (r.left + r.width / 2), from[1] + t.top + t.height / 2 - (r.top + r.height / 2)];
+    }
+    moved.set(item, goal);
+    const at = (p) => `${p[0]}px ${p[1]}px`;
+    const a = item.animate([{ translate: at(from) }, { translate: at(goal) }], { duration: ms, easing: "cubic-bezier(.45, 0, .25, 1)" });
+    item.style.translate = at(goal);
+    return a.finished.catch(() => {});
+  }
+
+  // Draws an SVG shape, or every shape inside an element, along its stroke.
+  function draw(id, ms = 900) {
+    const host = el(id);
+    const shapes = typeof host.getTotalLength === "function" ? [host] : [...host.querySelectorAll("path, line, polyline, polygon, circle, ellipse, rect")];
+    if (!shapes.length) throw new Error(`stage: #${id} has no SVG shape to draw`);
+    host.classList.remove("hidden");
+    return Promise.all(shapes.map((shape) => {
+      const length = shape.getTotalLength();
+      shape.style.strokeDasharray = length;
+      const a = shape.animate([{ strokeDashoffset: length }, { strokeDashoffset: 0 }], { duration: ms, easing: "ease-in-out" });
+      return a.finished.then(() => { shape.style.strokeDasharray = ""; }, () => {});
+    }));
+  }
+
+  // Counts a number up or down to `to`, from `from` or the number already there.
+  function count(id, to, { ms = 900, from, prefix, suffix, places } = {}) {
+    const target = el(id);
+    const start = from ?? (parseFloat(target.textContent.replace(/[^0-9.-]/g, "")) || 0);
+    return new Promise((done) => {
+      const t0 = performance.now();
+      const tick = (now) => {
+        const k = Math.min(1, (now - t0) / ms);
+        target.textContent = countText(start + (to - start) * (1 - (1 - k) ** 3), to, { prefix, suffix, places });
+        if (k < 1) requestAnimationFrame(tick);
+        else done();
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
   const opened = new Set();
   const screenOf = (id) => {
     const s = el(id);
@@ -249,19 +312,39 @@
     return a.finished.then(() => dot.remove(), () => dot.remove());
   }
 
+  const shown = (n) => {
+    for (let p = n; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity < 0.1 || p.classList.contains("hidden")) return false;
+      if (p.matches(".slot > [data-s]") && !p.classList.contains("on")) return false;
+      if (p.classList.contains("scene") && !p.classList.contains("on")) return false;
+    }
+    return true;
+  };
+
+  // Everything on the stage that a viewer could tell apart: what shows, where, and what it says.
+  function look() {
+    const parts = [];
+    for (const n of document.body.querySelectorAll("*")) {
+      if (n.closest("script, style, .tap") || !shown(n)) continue;
+      const r = n.getBoundingClientRect();
+      const own = [...n.childNodes].filter((c) => c.nodeType === 3).map((c) => c.data.trim()).join("");
+      parts.push(`${n.getAttribute("class") || ""}|${n.getAttribute("style") || ""}|${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}|${own}`);
+    }
+    return parts.join("\n");
+  }
+
   // What a reviewer would flag on screen right now, each issue once per take.
-  // The recorder calls it once at the end of every line.
-  function lint() {
+  // The recorder calls it once at the end of every line, with the line's id and
+  // whether a card covers the page.
+  function lint({ line = null, covered = false } = {}) {
     const issues = failures.splice(0);
     const W = innerWidth, H = innerHeight;
-    const shown = (n) => {
-      for (let p = n; p && p !== document.body; p = p.parentElement) {
-        const cs = getComputedStyle(p);
-        if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity < 0.1 || p.classList.contains("hidden")) return false;
-        if (p.matches(".slot > [data-s]") && !p.classList.contains("on")) return false;
-      }
-      return true;
-    };
+    const now = look();
+    if (!covered && lastLook === now) issues.push(`nothing on the stage changed during ${line ? `"${line}"` : "this line"}; give it a step that shows what it says`);
+    lastLook = now;
+    const header = [document.querySelector(".headline"), document.querySelector(".chapters")].filter(Boolean).map((n) => n.getBoundingClientRect());
+    const overlap = (r, s, pad = 4) => r.left + pad < s.right && s.left + pad < r.right && r.top + pad < s.bottom && s.top + pad < r.bottom;
     const range = document.createRange();
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let t = walker.nextNode(); t; t = walker.nextNode()) {
@@ -272,6 +355,7 @@
       if (size < 15) issues.push(`"${text.slice(0, 40)}" is ${size}px; stage text needs 15px or more to stay readable`);
       const r = p.getBoundingClientRect();
       if (r.right > W + 1 || r.bottom > H + 1 || r.left < -1 || r.top < -1) issues.push(`"${text.slice(0, 40)}" runs off the stage`);
+      if (p.closest(".scene") && !p.closest(".screen") && header.some((h) => overlap(r, h, 0))) issues.push(`"${text.slice(0, 40)}" runs into the headline; start a scene's content below ${Math.ceil(Math.max(...header.map((h) => h.bottom)))} points`);
       const box = p.closest(".screen") && !p.closest(".newtag") && p.closest(UI_BOX);
       if (box) {
         range.selectNodeContents(t);
@@ -285,20 +369,19 @@
       if (inner.scrollWidth > inner.clientWidth + 2 || inner.scrollHeight > inner.clientHeight + 2) issues.push(`#${b.id || b.className} has more content than fits in it`);
     }
     const rects = boxes.map((b) => ({ b, r: b.getBoundingClientRect() }));
-    const overlap = (r, s, pad = 4) => r.left + pad < s.right && s.left + pad < r.right && r.top + pad < s.bottom && s.top + pad < r.bottom;
     for (let i = 0; i < rects.length; i++)
       for (let j = i + 1; j < rects.length; j++) if (overlap(rects[i].r, rects[j].r)) issues.push(`#${rects[i].b.id} and #${rects[j].b.id} overlap`);
     const head = document.querySelector(".headline span:not(.out)"), chaps = document.querySelector(".chapters");
     if (head && chaps && overlap(head.getBoundingClientRect(), chaps.getBoundingClientRect(), 0)) issues.push(`the headline "${head.textContent}" runs into the chapters; shorten it`);
-    const top = [document.querySelector(".headline"), chaps].filter(Boolean).map((n) => n.getBoundingClientRect());
     for (const { b, r } of rects) {
-      if (b.classList.contains("screen") && top.some((t) => overlap(r, t, 0))) issues.push(`#${b.id} runs into the headline; start it below ${Math.ceil(Math.max(...top.map((t) => t.bottom)))} points`);
+      if (header.some((t) => overlap(r, t, 0))) issues.push(`#${b.id} runs into the headline; start it below ${Math.ceil(Math.max(...header.map((t) => t.bottom)))} points`);
     }
-    const content = rects.map((x) => x.r);
+    const drawn = [...document.querySelectorAll(".scene.on > *")].filter((n) => !n.classList.contains("screen") && shown(n));
+    const content = [...rects.map((x) => x.r), ...drawn.map((n) => n.getBoundingClientRect())];
     if (content.length) {
       const bottom = Math.max(...content.map((r) => r.bottom)), right = Math.max(...content.map((r) => r.right));
       if (bottom < H * 0.62 || right < W * 0.62) emptyLines++;
-      if (emptyLines === 2) issues.push(`most of the stage stays empty (content ends at ${Math.round(right)}×${Math.round(bottom)} of ${W}×${H}); give the screen the whole stage under the headline`);
+      if (emptyLines === 2) issues.push(`most of the stage stays empty (content ends at ${Math.round(right)}×${Math.round(bottom)} of ${W}×${H}); give the scene the whole stage under the headline`);
     }
     return issues.filter((m) => !reported.has(m) && reported.add(m));
   }
@@ -315,6 +398,7 @@
       build();
       document.fonts.ready.then(() => requestAnimationFrame(() => {
         sizeSlots();
+        lastLook = look();
         root.ready = true;
       }));
     };
@@ -322,5 +406,5 @@
     else start();
   }
 
-  root.stage = { steps, show, hide, mark, state, headline, chapter, type, sleep, open, close, tap, lint };
+  root.stage = { steps, scene, show, hide, mark, state, headline, chapter, type, move, draw, count, sleep, open, close, tap, lint };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -117,3 +117,12 @@ test("a web target's clock and mock are checked before a take", () => {
   assert.strictEqual(errors.length, 1);
   assert.match(errors[0], /"clock" is a date and time/);
 });
+
+test("a treatment names its subject, its look and its scenes", () => {
+  const video = { ...ok, for: "me", narration: [{ id: "a", text: "A page appears." }] };
+  const check = (treatment) => checkVideo({ ...video, treatment }, { async a() {} }).errors;
+  assert.deepStrictEqual(check({ subject: "A page and its saved copy.", look: "The product's own colours.", scenes: [{ id: "page", shows: "The page as the visitor sees it." }] }), []);
+  assert.ok(check("screens").some((e) => /"treatment" is \{/.test(e)));
+  assert.ok(check({ subject: "A page.", look: "Its own.", scenes: [] }).some((e) => /no "scenes"/.test(e)));
+  assert.ok(check({ look: "Its own.", scenes: [{ id: "page" }, { id: "x", shows: "y" }, { id: "x", shows: "z" }] }).length === 3);
+});

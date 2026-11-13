@@ -35,6 +35,33 @@ function checkPage(html, name, base, errors) {
   }
 }
 
+const SCENE_TAG = /<[a-z][^>]*\bclass\s*=\s*["'](?:[^"']*\s)?scene(?:\s[^"']*)?["'][^>]*>/gi;
+const scenesIn = (html) => [...html.matchAll(SCENE_TAG)].map(([tag]) => tag.match(/\bid\s*=\s*["']([^"']+)/)?.[1]).filter(Boolean);
+
+// video.json "treatment": what an idea video is made of, written before its
+// page. Every scene it names is drawn in the page, and the page draws no other.
+function checkTreatment(video, errors, warnings, dir) {
+  const t = video.treatment;
+  const text = (v) => typeof v === "string" && v.trim();
+  if (!t || typeof t !== "object" || Array.isArray(t)) return errors.push('video.json "treatment" is { "subject", "look", "scenes" }');
+  if (/\bTODO\b/.test(JSON.stringify(t))) return errors.push('video.json "treatment" still has a TODO placeholder; write it before the page');
+  if (!text(t.subject)) errors.push('video.json treatment has no "subject": the real things this video shows');
+  if (!text(t.look)) errors.push('video.json treatment has no "look": where its colours and type come from');
+  const scenes = Array.isArray(t.scenes) ? t.scenes : [];
+  if (!scenes.length) return errors.push('video.json treatment has no "scenes": [{ "id", "shows" }]');
+  const ids = new Set();
+  for (const s of scenes) {
+    if (!text(s?.id) || !text(s?.shows)) errors.push(`video.json treatment: a scene needs an "id" and what it "shows" (${JSON.stringify(s).slice(0, 60)})`);
+    else if (ids.has(s.id)) errors.push(`video.json treatment: scene "${s.id}" is listed twice`);
+    else ids.add(s.id);
+  }
+  const page = dir && video.target?.file && path.resolve(dir, video.target.file);
+  if (!page || !fs.existsSync(page)) return;
+  const drawn = new Set(scenesIn(fs.readFileSync(page, "utf8")));
+  for (const id of ids) if (!drawn.has(id)) errors.push(`treatment scene "${id}" is not in the page; draw it as <section class="scene" id="${id}">`);
+  for (const id of drawn) if (!ids.has(id)) warnings.push(`the page has a scene "${id}" that the treatment does not list`);
+}
+
 function checkTarget(t, errors, dir) {
   if (!t || !["web", "window"].includes(t.type)) return errors.push('video.json "target" needs a "type": "web" or "window"');
   if (t.type === "web" && !t.url && !t.file) errors.push('a web target needs "url" or "file"');
@@ -57,6 +84,7 @@ function checkVideo(video, beats, { dir = null } = {}) {
   const warnings = [];
   if (!video.title) errors.push("video.json has no title");
   checkTarget(video.target, errors, dir);
+  if (video.treatment !== undefined) checkTreatment(video, errors, warnings, dir);
   let audience;
   try {
     audience = audienceOf(video);
