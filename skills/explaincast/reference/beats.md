@@ -14,7 +14,8 @@
 | `hide` | Terms the checks flag on screen |
 | `pronounce` | `{ "nginx": "engine x" }`: how the voice says a word; captions keep the written one |
 | `heard` | `{ "sas": "sass", "super base": "supabase" }`: how the transcript spells a word or phrase the voice says right. A voice NOTE in `qa/report.json` gives the entry to add |
-| `voice`, `style` | TTS voice (`marin`) and style prompt |
+| `voice` | The narrator: `local` (the default: on this Mac, no key, English only) or `openai` (the cloud voice: more natural, any language, needs an OpenAI API key). One of their voices by name also works: `af_heart` (the local default), `am_michael`, `bf_emma`, `bm_george`; `marin` (OpenAI's default), `cedar`; or both, as in `openai/cedar`. A video already voiced keeps its narrator until `voice` names another or `--respeak` runs, and either one needs a new take |
+| `style` | The cloud voice's style prompt. The local voice has none |
 | `music` | `true`, `false` or a file, overriding the audience |
 | `zooms` | Changes to recorded zooms, by the id the render log prints, applied with `--mux-only`: `{ "line#1": { scale, at, ms, drop } }` |
 | `cover` | `{ words, line, at, crop, style: "window" \| "closeup" }` or `{ image }`: the thumbnail. Without one, a public video's thumbnail is the opening card's words beside the window at the take's best still: a settled moment of a main view, full of content, with nothing the checks flag. The render log and `qa/report.json` give it as a `cover` to pin or change. `"card"` keeps the words alone |

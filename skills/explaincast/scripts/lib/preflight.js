@@ -1,6 +1,6 @@
 // node preflight.js [<video folder>] [flags], run by take.sh before make.js.
-// Sets up what it can (Chromium, the music bed, the native helpers) and lists
-// the rest with the step that fixes it, exiting 1.
+// Sets up what it can (Chromium, the music bed, the native helpers, the local
+// voice) and lists the rest with the step that fixes it, exiting 1.
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -10,7 +10,9 @@ const { parseCli, videoDir } = require("./cli");
 const { lintDir } = require("./lint");
 const { helper } = require("./helpers");
 const { audienceOf } = require("./audience");
-const { KEY_STEPS } = require("./voice");
+const { narratorOf } = require("./voice");
+const local = require("./local");
+const openai = require("./openai");
 
 const ROOT = process.env.EXPLAINCAST_DIR || path.join(os.homedir(), "Movies/explaincast");
 let cli;
@@ -77,10 +79,23 @@ async function music() {
   }
 }
 
-function voice() {
-  if (!audio || muxOnly || process.env.OPENAI_API_KEY) return;
-  const has = run("security", ["find-generic-password", "-s", "explaincast", "-a", "openai"]).status === 0;
-  if (!has) missing.push(`an OpenAI API key, for the voice:\n${KEY_STEPS}`);
+async function voice() {
+  if (!audio || muxOnly) return;
+  let narrator;
+  try {
+    narrator = narratorOf({ voice: video.voice, audioDir: dir && path.join(dir, "audio"), respeak: !!o.respeak });
+  } catch (e) {
+    return missing.push(`video.json ${e.message}`);
+  }
+  if (narrator.engine === openai) {
+    if (!openai.hasKey()) missing.push(`an OpenAI API key, for the cloud voice (or "voice": "local" in video.json, which needs none):\n${openai.KEY_STEPS}`);
+    return;
+  }
+  try {
+    done.push(...(await local.setup((m) => console.log(`preflight: ${m}`))));
+  } catch (e) {
+    missing.push(`the local voice: ${e.message}`);
+  }
 }
 
 function script() {
@@ -130,7 +145,7 @@ async function main() {
   tools();
   chromium();
   await music();
-  voice();
+  await voice();
   script();
   helpers();
   permissions();

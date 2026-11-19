@@ -1,44 +1,53 @@
-// Narration clips: one OpenAI speech clip per line, cached by model, voice,
-// style and text, with Whisper word onsets so a beat can land an action on a
-// spoken word (and a caption can light the word up).
+// Narration clips: one clip per line from the video's narrator (the local
+// voice, or OpenAI's), cached by model, voice, style and text, with word
+// onsets so a beat can land an action on a spoken word (and a caption can
+// light the word up).
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { alignWords } = require("./words");
+const local = require("./local");
+const openai = require("./openai");
 
-const MODEL = "gpt-4o-mini-tts";
+const ENGINES = { local, openai, cloud: openai };
 const SILENT_MS = 3000;
-// Lines voiced at once: each is a speech call and a transcription call, well
-// under a paid account's per-minute limits.
-const JOBS = 4;
-const KEYCHAIN_SERVICE = "explaincast";
-const KEY_STEPS = [
-  "1. Create a key at https://platform.openai.com/api-keys (the account needs billing set up)",
-  "2. In Terminal, run this and paste the key when it says Key: (nothing shows as you paste):",
-  `     printf 'Key: '; read -rs k; echo; security add-generic-password -s ${KEYCHAIN_SERVICE} -a openai -U -w "$k"; unset k`,
-  "   Or set OPENAI_API_KEY instead. Never paste the key into your coding agent's chat.",
-  "   Step by step: https://github.com/gug007/explaincast#set-up-your-openai-key",
-].map((l) => `      ${l}`).join("\n");
 
-function apiKey() {
-  if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-  try {
-    return execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", "openai", "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    // no key under this name
-  }
-  throw new Error(`no OpenAI API key found:\n${KEY_STEPS}`);
+// video.json "voice": an engine ("local", "openai"), one of its voices
+// ("af_heart", "marin"), or both ("openai/cedar").
+function parseVoice(setting) {
+  const [first, name, ...rest] = String(setting).trim().split("/");
+  const engine = Object.hasOwn(ENGINES, first) ? ENGINES[first] : null;
+  if (engine && !rest.length) return { engine, voice: name || engine.voice };
+  if (name != null) throw new Error(`"voice" is "local", "openai", a voice's name, or both as in "openai/cedar" (got "${setting}")`);
+  return { engine: local.hasVoice(first) ? local : openai, voice: first };
 }
 
-// A 401 is most often a key cut short when it was saved, so it says how to
-// save it again; a 429 for quota is an account with no credit left.
-async function apiError(label, res) {
-  const body = await res.text();
-  if (res.status === 429 && body.includes("insufficient_quota")) {
-    return new Error(`${label}: the OpenAI account is out of credit (429). Add a payment method or credits at https://platform.openai.com/settings/organization/billing, then run again.\n      OpenAI said: ${body}`);
+// Who spoke the clips already in `audioDir`, from their stamps.
+function spokenBy(audioDir) {
+  let stamps;
+  try {
+    stamps = fs.readdirSync(audioDir).filter((f) => f.endsWith(".txt"));
+  } catch {
+    return null;
   }
-  if (res.status !== 401) return new Error(`${label}: ${res.status} ${body}`);
-  return new Error(`${label}: OpenAI refused the API key (401). Check it is the right key and save it again:\n${KEY_STEPS}\n      OpenAI said: ${body}`);
+  for (const f of stamps) {
+    const [model, voice] = fs.readFileSync(path.join(audioDir, f), "utf8").split("\n")[0].split("@")[0].split("/");
+    const engine = [local, openai].find((e) => e.model === model);
+    if (engine && voice) return { engine, voice };
+  }
+  return null;
+}
+
+// The video's narrator: the one video.json names; else the one its clips were
+// spoken by, since a second narrator would re-speak every line and a re-cut
+// can't; else EXPLAINCAST_VOICE; else the local voice. `respeak` voices every
+// line again, so it lets go of the clips' narrator.
+function narratorOf({ voice, audioDir, respeak = false, env = process.env } = {}) {
+  if (voice) return parseVoice(voice);
+  const usual = parseVoice(env.EXPLAINCAST_VOICE || "local");
+  const clips = !respeak && audioDir ? spokenBy(audioDir) : null;
+  const kept = clips && (clips.engine !== usual.engine || clips.voice !== usual.voice);
+  return kept ? { ...clips, kept: true } : usual;
 }
 
 function durationMs(file) {
@@ -48,35 +57,6 @@ function durationMs(file) {
     { encoding: "utf8" },
   );
   return Math.round(parseFloat(out) * 1000);
-}
-
-const TRIES = 3;
-const RETRY_AFTER_MAX_MS = 30000;
-
-// How long a rate-limited reply asks to wait, from its retry-after header.
-function retryAfterMs(res) {
-  const s = parseFloat(res.headers.get("retry-after"));
-  return Number.isFinite(s) && s >= 0 ? Math.min(s * 1000, RETRY_AFTER_MAX_MS) : 0;
-}
-
-// A dropped connection, a 5xx or a rate limit (429) is tried again, a rate
-// limit no sooner than its retry-after; anything else, an account out of
-// credit included, is a real error. `waitMs` is the pause before attempt n+1.
-async function post(url, init, label, { waitMs = (n) => 1500 * n } = {}) {
-  for (let attempt = 1; ; attempt++) {
-    let wait = waitMs(attempt);
-    try {
-      const res = await fetch(url, init);
-      const limited = res.status === 429 && !(await res.clone().text()).includes("insufficient_quota");
-      if ((res.status < 500 && !limited) || attempt === TRIES) return res;
-      if (limited) wait = Math.max(wait, retryAfterMs(res));
-      console.log(`${label}: ${res.status}${limited ? " (rate limited)" : ""}, trying again (${attempt}/${TRIES})`);
-    } catch (e) {
-      if (attempt === TRIES) throw e;
-      console.log(`${label}: ${e.cause?.code || e.message}, trying again (${attempt}/${TRIES})`);
-    }
-    await new Promise((r) => setTimeout(r, wait));
-  }
 }
 
 // `fn` over `items`, at most `limit` at a time, in their order. After a
@@ -111,10 +91,13 @@ function speaker(pronounce = {}) {
 
 // `tempo` speeds a clip up after it is spoken (pitch kept), before its words
 // are timed, so the onsets match what plays.
-function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronounce, model = MODEL, jobs = JOBS }) {
+function makeVoice({ audioDir, voice: setting, style: styled, respeak = false, tempo = 1, pronounce, env }) {
+  const narrator = narratorOf({ voice: setting, audioDir, respeak, env });
+  const { engine, voice } = narrator;
+  const style = engine.styled ? styled : "";
   const spoken = speaker(pronounce);
-  // The TTS model sometimes swallows a short closing sentence; a clip has to
-  // carry every word (in particular the last ones) or it is spoken again.
+  // A voice can swallow a short closing sentence; a clip has to carry every
+  // word (in particular the last ones).
   function missingWords(line, words) {
     const { all, times } = alignWords(spoken(line.text), words);
     const missed = all.filter((_, i) => times[i] == null);
@@ -122,7 +105,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
     return missed.length > all.length * 0.15 || tailLost ? missed : [];
   }
   fs.mkdirSync(audioDir, { recursive: true });
-  const head = tempo === 1 ? `${model}/${voice}` : `${model}/${voice}@${tempo}`;
+  const head = tempo === 1 ? `${engine.model}/${voice}` : `${engine.model}/${voice}@${tempo}`;
 
   // A clip already spoken for this text stays as it is even after the default
   // style changes: a re-spoken line has a different length and would desync
@@ -134,7 +117,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
     return had === want && hadText.join("\n") === wantText.join("\n");
   }
 
-  // `cachedOnly` (a re-cut) never calls the API: a line whose clip no longer
+  // `cachedOnly` (a re-cut) never speaks: a line whose clip no longer
   // matches its text stops the run, since the new clip changes the timing.
   async function tts(line, { fresh = false, cachedOnly = false } = {}) {
     const wav = path.join(audioDir, `${line.id}.wav`);
@@ -152,19 +135,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
       throw new Error(`audio ${line.id}: the line has no clip for its current text; a re-cut never speaks. Run --speak-only to voice it, then --mux-only again, which checks the new clip still fits the take; or put the old text back`);
     }
     fs.rmSync(path.join(audioDir, `${line.id}.words.json`), { force: true });
-    const res = await post("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        voice,
-        input: spoken(line.text),
-        instructions: style,
-        response_format: "wav",
-      }),
-    }, `tts ${line.id}`);
-    if (!res.ok) throw await apiError(`tts ${line.id}`, res);
-    const clip = Buffer.from(await res.arrayBuffer());
+    const clip = await engine.speak(spoken(line.text), { voice, style, label: `tts ${line.id}` });
     if (tempo === 1) {
       fs.writeFileSync(wav, clip);
     } else {
@@ -180,24 +151,14 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
   async function words(line, wav) {
     const file = path.join(audioDir, `${line.id}.words.json`);
     if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, "utf8"));
-    const form = new FormData();
-    form.append("model", "whisper-1");
-    form.append("response_format", "verbose_json");
-    form.append("timestamp_granularities[]", "word");
-    form.append("file", new Blob([fs.readFileSync(wav)], { type: "audio/wav" }), `${line.id}.wav`);
-    const res = await post("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey()}` },
-      body: form,
-    }, `words ${line.id}`);
-    if (!res.ok) throw await apiError(`words ${line.id}`, res);
-    const out = ((await res.json()).words || []).map((w) => ({ word: w.word, start: w.start, end: w.end }));
+    const out = await engine.transcribe(wav, { label: `words ${line.id}` });
     fs.writeFileSync(file, JSON.stringify(out));
     return out;
   }
 
   // A clip that already carries the take's timing is never replaced because
-  // the word check disagrees with it; only a fresh clip is spoken again.
+  // the word check disagrees with it; only a fresh clip is spoken again, by a
+  // voice that may say it differently the next time.
   async function speak(line, cachedOnly) {
     const heard = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -207,6 +168,10 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
       if (!missed.length) return { wav, words: w, cached };
       if (cached) {
         console.log(`audio ${line.id}: the transcript misses "${missed.join(" ")}"; keeping the clip the take was recorded with`);
+        return { wav, words: w, cached };
+      }
+      if (!engine.respeaks) {
+        console.log(`audio ${line.id}: the transcript misses "${missed.join(" ")}"; the report's voice check shows what was heard`);
         return { wav, words: w, cached };
       }
       heard.push(w.map((x) => x.word).join(" "));
@@ -222,14 +187,18 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
   }
 
   // Every narration line as it will play, in order: a spoken clip with its
-  // length and word onsets, or a silent pause. Lines are voiced `jobs` at a
-  // time; two lines with one id would share a clip's files, so they stop the
-  // run first. `dry` never calls the API; `cachedOnly` uses the clips on disk
-  // and fails where one is missing.
+  // length and word onsets, or a silent pause. Lines are voiced as many at a
+  // time as the narrator takes; two lines with one id would share a clip's files, so they stop the
+  // run first. `dry` never speaks; `cachedOnly` uses the clips on disk and
+  // fails where one is missing.
   async function prepare(narration, { dry = false, cachedOnly = false } = {}) {
     const twice = narration.map((l) => l.id).filter((id, i, ids) => ids.indexOf(id) !== i);
     if (twice.length) throw new Error(`narration id "${twice[0]}" is used twice; every line needs its own`);
-    return mapLimit(narration, jobs, async (line) => {
+    for (const line of narration) {
+      const no = line.text && engine.cannotSay?.(spoken(line.text));
+      if (no) throw new Error(`line "${line.id}": ${no}`);
+    }
+    return mapLimit(narration, engine.jobs, async (line) => {
       if (!line.text) return { ...line, ms: line.ms ?? SILENT_MS, silent: true };
       if (dry && !hasClip(line)) {
         const count = line.text.split(/\s+/).length;
@@ -242,7 +211,7 @@ function makeVoice({ audioDir, voice, style, respeak = false, tempo = 1, pronoun
     });
   }
 
-  return { prepare };
+  return { prepare, narrator: { engine: engine.name, voice, kept: !!narrator.kept }, release: async () => engine.release?.() };
 }
 
-module.exports = { makeVoice, speaker, mapLimit, post, KEY_STEPS };
+module.exports = { makeVoice, narratorOf, speaker, mapLimit };

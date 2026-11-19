@@ -38,13 +38,26 @@ You also need:
 | ffmpeg | `brew install ffmpeg` |
 | Xcode Command Line Tools | `xcode-select --install` |
 | Playwright | `npm install -g @playwright/cli` (tested on 0.1.17). Its Chromium downloads on the first run |
-| An OpenAI API key, for the voice | See [Set up your OpenAI key](#set-up-your-openai-key) below |
 
-Every run checks the machine first and tells you what is missing.
+Every run checks the machine first and tells you what is missing. No account or API key is needed: the voice runs on your Mac.
+
+### Voice
+
+By default the narration is spoken on your Mac by [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), and [Whisper](https://github.com/openai/whisper) times its words. It needs no key and sends nothing anywhere. The first video downloads both into `~/Library/Caches/explaincast/voice`, about 1 GB. The local voice speaks English only.
+
+For better audio, use the cloud voice from OpenAI. It sounds more natural and speaks other languages, and it needs your own API key ([set it up](#set-up-your-openai-key) once). Then ask the agent for the cloud voice, or choose it yourself:
+
+| For | Set |
+| --- | --- |
+| One video | `"voice": "openai"` in its `video.json` |
+| A project | `"voice": "openai"` in `.explaincast.json` at its root |
+| Every video | `export EXPLAINCAST_VOICE=openai` in your `~/.zshrc` |
+
+`voice` also takes a voice's name: `af_heart` (the local default), `am_michael`, `bf_emma` or another English [Kokoro voice](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) for the local one, and `marin` (the default) or `cedar` for OpenAI's. A video already voiced keeps its voice until you name another.
 
 ### Set up your OpenAI key
 
-The voice and the word timing come from OpenAI, so explaincast needs your own API key. You do this once.
+Only the cloud voice needs this. Its speech and word timing come from OpenAI, on your own API key. You do this once.
 
 1. **Get a key.** Sign in at [platform.openai.com/api-keys](https://platform.openai.com/api-keys), click **Create new secret key** and copy it. It starts with `sk-`. The API is billed per use, so the account needs a payment method or credits under [Billing](https://platform.openai.com/settings/organization/billing).
 2. **Save it in your Mac's Keychain.** Open Terminal, run this, paste the key when it says `Key:` and press Return. Nothing shows as you paste:
@@ -110,7 +123,7 @@ Every video, client ones included, uses explaincast's own look by default: a war
 
 ## Good to know
 
-- **Your narration goes to OpenAI**, for speech and transcription, on your own key. The recording stays on your Mac. Check before narrating anything confidential.
+- **The cloud voice sends your narration to OpenAI**, for speech and transcription, on your own key. Check before narrating anything confidential with it. The local voice sends nothing, and the recording stays on your Mac with either.
 - **Nothing is blurred.** The checks flag your own account details, email addresses and any terms you list in `hide`, but they know no other names. For client work, record demo or staging data, or have a web video answer the app's requests with saved data (`mock` in [reference/beats.md](skills/explaincast/reference/beats.md)).
 - **Music:** public videos use "Vastness" by Andrew Ev from [Mixkit](https://mixkit.co/license/#musicFree), free for use in videos. Mixkit's terms forbid redistributing the file, so it isn't in this repo: the first public video downloads it. Set `"music": false` in `video.json` to go without.
 

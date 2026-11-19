@@ -38,7 +38,6 @@ try {
   process.exit(2);
 }
 const slug = path.basename(DIR);
-const DEFAULT_VOICE = "marin";
 const DEFAULT_STYLE =
   "Talk like a real person casually showing a colleague how something works, over their shoulder: relaxed, natural, everyday intonation with small pauses. Not a voiceover artist or announcer, no over-enunciation, moderate pace. Keep every word crisp and easy to catch.";
 const MUSIC_UNDER_VOICE_LU = 14;
@@ -49,14 +48,15 @@ const VOICE_SHAPE = { level: true, brightness: -16.5 };
 const video = JSON.parse(fs.readFileSync(path.join(DIR, "video.json"), "utf8"));
 const audience = audienceOf(video);
 setHeard(video.heard);
-const VOICE = video.voice || DEFAULT_VOICE;
-const TTS_STYLE = video.style || DEFAULT_STYLE;
 const dry = !!o["no-audio"];
 const muxOnly = !!o["mux-only"];
 const audioDir = path.join(DIR, "audio");
 const wantsMusic = video.music ?? audience.music;
 const music = wantsMusic === false ? null : typeof wantsMusic === "string" ? path.resolve(DIR, wantsMusic) : DEFAULT_BED;
-const voice = makeVoice({ audioDir, voice: VOICE, style: TTS_STYLE, respeak: !!o.respeak, pronounce: video.pronounce });
+const voice = makeVoice({ audioDir, voice: video.voice, style: video.style || DEFAULT_STYLE, respeak: !!o.respeak, pronounce: video.pronounce });
+const NARRATOR = `${voice.narrator.voice}, ${voice.narrator.engine === "local" ? "the local voice" : "OpenAI's"}`;
+// Printed with every result, for the reply to pass on.
+const BETTER_VOICE = 'better audio: the cloud voice sounds more natural than the local one. Set "voice": "openai" in video.json and take again; it needs an OpenAI API key (https://github.com/gug007/explaincast#voice)';
 const frame = frameFor(video);
 const captureIn = video.target.type === "web" ? SCREENCAST_IN : CAPTURE_IN;
 // The cards', thumbnail's and canvas's look: explaincast's own, or video.json
@@ -106,7 +106,7 @@ async function record(lines) {
   const keep = dry && lines.every((l) => l.silent || l.wav) && !timeline.warnings?.length;
   if (keep) timeline.reuse = key;
   fs.writeFileSync(take.timeline, JSON.stringify(timeline, null, 2));
-  console.log(`recorded ${(timeline.totalMs / 1000).toFixed(1)}s (${VOICE})`);
+  console.log(`recorded ${(timeline.totalMs / 1000).toFixed(1)}s (${voice.narrator.voice})`);
   for (const w of timeline.warnings || []) console.log(`  warning (${w.kind}${w.line ? `, line ${w.line}` : ""}): ${w.message}`);
   if (dry) {
     finishDryTake(take, { keep });
@@ -297,6 +297,11 @@ async function makeThumbnail(file, words, taken) {
   return made;
 }
 
+function voiceNote() {
+  console.log(`voice: ${NARRATOR}${voice.narrator.kept ? ' (kept from this video\'s clips; "voice" in video.json or --respeak changes it)' : ""}`);
+  if (voice.narrator.engine === "local") console.log(BETTER_VOICE);
+}
+
 (async () => {
   exitOnSignals();
   if (o["speak-only"] && video.narration.some((l) => /\bTODO\b/.test(l.text || ""))) throw new Error("the narration still has TODO placeholders; a clip would speak them");
@@ -305,11 +310,12 @@ async function makeThumbnail(file, words, taken) {
     for (const w of lint.warnings) console.log(`lint: ${w}`);
     if (lint.errors.length) throw new Error(`the video has mistakes to fix before a take:\n  ${lint.errors.join("\n  ")}`);
   }
-  const lines = await voice.prepare(video.narration, { dry, cachedOnly: muxOnly });
+  const lines = await voice.prepare(video.narration, { dry, cachedOnly: muxOnly }).finally(() => voice.release());
   if (o["speak-only"]) {
     const { gapMs = GAP_MS, leadMs = LEAD_MS, tailMs = TAIL_MS } = audience.pace;
     const ms = lines.reduce((sum, l) => sum + l.ms + gapMs, leadMs + tailMs);
-    return console.log(`about ${(ms / 1000).toFixed(1)} s in all; a dry run now uses these lengths`);
+    console.log(`about ${(ms / 1000).toFixed(1)} s in all; a dry run now uses these lengths`);
+    return voiceNote();
   }
   if (!muxOnly) await record(lines);
   if (dry) return;
@@ -319,6 +325,7 @@ async function makeThumbnail(file, words, taken) {
   const timeline = await render(lines);
   const taken = JSON.parse(fs.readFileSync(P.timeline, "utf8"));
   await finish(lines, timeline, taken);
+  voiceNote();
   console.log(`done -> ${P.mp4}`);
 })().catch(async (e) => {
   console.error(e.stack && !/^Error: /.test(String(e)) ? e.stack : e.message || e);

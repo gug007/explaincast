@@ -3,7 +3,9 @@ const assert = require("node:assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { makeVoice, mapLimit, post } = require("../skills/explaincast/scripts/lib/voice");
+const { makeVoice, narratorOf, mapLimit } = require("../skills/explaincast/scripts/lib/voice");
+const { post } = require("../skills/explaincast/scripts/lib/openai");
+const { wav } = require("../skills/explaincast/scripts/lib/local");
 
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -105,4 +107,79 @@ test("two lines with one id stop the run before anything is voiced", async (t) =
     tmpVoice(t).prepare([{ id: "a", text: "One." }, { id: "a", text: "Two." }], { dry: true }),
     /"a" is used twice/,
   );
+});
+
+const who = (opts) => {
+  const { engine, voice, kept } = narratorOf({ env: {}, ...opts });
+  return [engine.name, voice, !!kept];
+};
+
+test("a video with no voice named is spoken by the local voice, or by EXPLAINCAST_VOICE", () => {
+  assert.deepStrictEqual(who(), ["local", "af_heart", false]);
+  assert.deepStrictEqual(who({ env: { EXPLAINCAST_VOICE: "openai" } }), ["openai", "marin", false]);
+  assert.deepStrictEqual(who({ voice: "local", env: { EXPLAINCAST_VOICE: "openai" } }), ["local", "af_heart", false]);
+});
+
+test("voice names an engine, one of its voices, or both", () => {
+  assert.deepStrictEqual(who({ voice: "openai" }), ["openai", "marin", false]);
+  assert.deepStrictEqual(who({ voice: "cloud" }), ["openai", "marin", false]);
+  assert.deepStrictEqual(who({ voice: "cedar" }), ["openai", "cedar", false]);
+  assert.deepStrictEqual(who({ voice: "bm_george" }), ["local", "bm_george", false]);
+  assert.deepStrictEqual(who({ voice: "openai/cedar" }), ["openai", "cedar", false]);
+  assert.deepStrictEqual(who({ voice: "local/am_michael" }), ["local", "am_michael", false]);
+  assert.throws(() => who({ voice: "elsewhere/cedar" }), /"voice" is "local", "openai"/);
+  assert.throws(() => who({ voice: "openai/cedar/fast" }), /got "openai\/cedar\/fast"/);
+});
+
+test("a video already voiced keeps its narrator until video.json names one or --respeak starts over", (t) => {
+  const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), "explaincast-voice-"));
+  t.after(() => fs.rmSync(audioDir, { recursive: true, force: true }));
+  assert.deepStrictEqual(who({ audioDir }), ["local", "af_heart", false]);
+  fs.writeFileSync(path.join(audioDir, "intro.txt"), "gpt-4o-mini-tts/cedar@1.1\nplain\nHello.");
+  assert.deepStrictEqual(who({ audioDir }), ["openai", "cedar", true]);
+  assert.deepStrictEqual(who({ audioDir, respeak: true }), ["local", "af_heart", false]);
+  assert.deepStrictEqual(who({ audioDir, voice: "local" }), ["local", "af_heart", false]);
+  fs.writeFileSync(path.join(audioDir, "intro.txt"), "kokoro-82m/am_michael\n\nHello.");
+  assert.deepStrictEqual(who({ audioDir, env: { EXPLAINCAST_VOICE: "openai" } }), ["local", "am_michael", true]);
+  fs.writeFileSync(path.join(audioDir, "intro.txt"), "kokoro-82m/af_heart\n\nHello.");
+  assert.deepStrictEqual(who({ audioDir }), ["local", "af_heart", false]);
+});
+
+test("the local voice stops at a line it cannot say, before anything is voiced", async (t) => {
+  const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), "explaincast-voice-"));
+  t.after(() => fs.rmSync(audioDir, { recursive: true, force: true }));
+  const voice = makeVoice({ audioDir, env: {} });
+  assert.deepStrictEqual(voice.narrator, { engine: "local", voice: "af_heart", kept: false });
+  await assert.rejects(voice.prepare([{ id: "a", text: "Open the café menu." }, { id: "b", text: "Всё готово." }], { dry: true }), /line "b": the local voice speaks English only/);
+  const lines = await voice.prepare([{ id: "a", text: "Open the café menu." }], { dry: true });
+  assert.strictEqual(lines[0].ms, 4 * 370 + 500);
+});
+
+test("the cloud voice speaks a line through OpenAI once, and keeps its clip, stamp and words", async (t) => {
+  const audioDir = fs.mkdtempSync(path.join(os.tmpdir(), "explaincast-voice-"));
+  const real = { fetch: global.fetch, key: process.env.OPENAI_API_KEY };
+  t.after(() => {
+    fs.rmSync(audioDir, { recursive: true, force: true });
+    global.fetch = real.fetch;
+    if (real.key == null) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = real.key;
+  });
+  t.mock.method(console, "log", () => {});
+  process.env.OPENAI_API_KEY = "sk-test";
+  const calls = [];
+  const heard = [{ word: "Save", start: 0, end: 0.2 }, { word: "it", start: 0.2, end: 0.3 }, { word: "now.", start: 0.3, end: 0.5 }];
+  global.fetch = async (url, init) => {
+    calls.push({ url, auth: init.headers.Authorization, body: typeof init.body === "string" ? JSON.parse(init.body) : null });
+    return url.endsWith("/speech") ? new Response(wav(new Float32Array(12000).fill(0.1))) : new Response(JSON.stringify({ words: heard }));
+  };
+  const narration = [{ id: "a", text: "Save *it* now." }];
+  const voice = makeVoice({ audioDir, voice: "openai", style: "plain", env: {} });
+  assert.deepStrictEqual(voice.narrator, { engine: "openai", voice: "marin", kept: false });
+  const [line] = await voice.prepare(narration);
+  assert.deepStrictEqual([line.ms, line.words], [500, heard]);
+  assert.deepStrictEqual(calls.map((c) => c.url), ["https://api.openai.com/v1/audio/speech", "https://api.openai.com/v1/audio/transcriptions"]);
+  assert.deepStrictEqual(calls[0], { url: calls[0].url, auth: "Bearer sk-test", body: { model: "gpt-4o-mini-tts", voice: "marin", input: "Save it now.", instructions: "plain", response_format: "wav" } });
+  assert.strictEqual(fs.readFileSync(path.join(audioDir, "a.txt"), "utf8"), "gpt-4o-mini-tts/marin\nplain\nSave it now.");
+  await makeVoice({ audioDir, style: "plain", env: {} }).prepare(narration);
+  assert.strictEqual(calls.length, 2);
 });

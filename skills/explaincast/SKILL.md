@@ -11,7 +11,15 @@ A video is a folder in `~/Movies/explaincast/<slug>/` (`EXPLAINCAST_DIR` moves i
 
 `${CLAUDE_SKILL_DIR}` below is this skill's folder, the one holding this SKILL.md. If it still reads as a variable, put that folder's absolute path in its place. Run the scripts from the user's project folder, not this one, since `new.js` looks there for `.explaincast.json`.
 
-macOS only. `take.sh` checks the machine before every run and names whatever is missing. If the OpenAI key is missing, give the user the steps it prints and wait for them to finish. Never ask for the key in the chat or run the Keychain command for them, since it prompts for the key.
+macOS only. `take.sh` checks the machine before every run and names whatever is missing.
+
+## Voice
+
+The narrator is the local voice unless the video says otherwise. It runs on the Mac, needs no key, sends nothing anywhere and speaks English only. The first run that voices a line downloads it, about 1 GB, so give that run a timeout of ten minutes or more.
+
+The cloud voice, OpenAI's, sounds more natural and speaks other languages. Use it when the user asks for it or for better audio, or when the narration isn't in English: set `"voice": "openai"` in `video.json`, then voice and take again. It needs the user's OpenAI API key. If the key is missing, give the user the steps `take.sh` prints and wait for them to finish. Never ask for the key in the chat or run the Keychain command for them, since it prompts for the key.
+
+A video keeps the voice its clips were spoken by until `voice` names another or `--respeak` runs.
 
 ## Workflow
 
@@ -21,7 +29,7 @@ macOS only. `take.sh` checks the machine before every run and names whatever is 
 4. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder> --no-audio`, a free dry run that proves every beat on the real timing. `frames/` shows the window at each line's end, without cards or zooms. A dry run on step 3's clips with no warnings is kept as the take.
 5. Run `${CLAUDE_SKILL_DIR}/scripts/take.sh <folder>` in the foreground to record and render. When the last run was a kept dry run and `video.json`, `beats.js`, the clips and an idea's page are unchanged, it renders that recording without recording again. Changes to `music`, `look`, `zooms`, `keys`, `speedUpWaits`, `cover`, `youtube`, `hide`, `title` or `brand` still count as unchanged. Otherwise it records in real time and then renders, so give the command a timeout well past the length step 3 printed. Pass `--fresh` to record anyway, as after a change to the app or its data since the dry run.
 6. Fix every warning, read `qa/report.json`, and look at `qa/sheet.jpg`, which has a tile for each line, card and zoom, and at `thumbnail.jpg`, whose moment the report's `thumbnail` names. A FAIL means the video isn't ready. A pass covers only what the report lists, so judge the tiles yourself.
-7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` and `.vtt` beside it, not burned in, with the script in `transcript.txt`.
+7. End the reply with the MP4's absolute path, and say that captions are in the `.srt` and `.vtt` beside it, not burned in, with the script in `transcript.txt`. When the run's last lines name the local voice, also say, in every such reply, that the cloud voice would improve the audio and that you can switch the video to it once they have an OpenAI API key.
 
 Any change to the narration or the beats needs a new take. `--mux-only` renders the last take again without recording, after changing `music`, `look` or a recorded zoom (`zooms`). `--respeak` voices every line again, for a clip that came out wrong.
 
@@ -55,5 +63,5 @@ A project can set defaults in `.explaincast.json` at its root: `target`, `for`, 
 - Write for the person who will use the thing, not the one who built it: what they do, what they see and what they get, in plain words. Say how it works underneath only when the request asks for the internals.
 - Keep each video standalone: no teasers, and no YAML, config or CLI detail unless that is the topic.
 - The checks flag the user's own details, any email address and `hide` terms, but know no other names, and nothing is blurred. For client work, record demo or staging data, or answer the app's requests with saved data (`mock`), and list the client's sensitive terms in `hide`. A web video that shows dates or "3 minutes ago" sets `clock`, so every take shows the same.
-- Narration goes to OpenAI. Check before voicing anything confidential.
+- The cloud voice sends the narration to OpenAI. Check before voicing anything confidential with it. The local voice sends nothing.
 - `setup` runs off camera. Read credentials from the environment there, never from `video.json` or `beats.js`.

@@ -17,4 +17,4 @@ function helper(name) {
   return bin;
 }
 
-module.exports = { helper };
+module.exports = { helper, CACHE };
