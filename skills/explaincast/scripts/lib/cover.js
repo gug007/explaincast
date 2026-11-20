@@ -13,6 +13,7 @@ const { DEFAULT_LOOK } = require("./look");
 // The tallest the words may set, by style: the window cover's column keeps
 // 128 px clear above and below, the closeup's words stay inside their band.
 const WORDS_MAX_H = { window: 1184, closeup: 340 };
+const WORDS_MAX_LINES = 4;
 
 const canvasCss = (look) => `${look.fontFace}
   html, body { margin: 0; width: 2560px; height: 1440px; overflow: hidden; }
@@ -47,11 +48,13 @@ function layout(style, words, img, aspect, look = DEFAULT_LOOK) {
 }
 
 // Long words shrink until the widest fits its column and the whole stays
-// within `maxH`; a cover's few words keep their size.
-function fitWords(maxH) {
+// within `maxH` and `maxLines`; a cover's few words keep their size.
+function fitWords({ maxH, maxLines }) {
   const el = document.querySelector(".words");
   for (let i = 0; i < 40; i++) {
-    if (el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().height <= maxH) return;
+    const { height } = el.getBoundingClientRect();
+    const lines = Math.round(height / parseFloat(getComputedStyle(el).lineHeight));
+    if (el.scrollWidth <= el.clientWidth + 1 && height <= maxH && lines <= maxLines) return;
     el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * 0.95}px`;
   }
 }
@@ -88,7 +91,7 @@ async function renderCover({ cover, raw, timeline, frame, file, captureIn, look 
       const tab = await browser.newPage({ viewport: { width: 2560, height: 1440 }, deviceScaleFactor: 1 });
       await tab.goto(`file://${page}`, { waitUntil: "load" });
       await tab.evaluate((font) => document.fonts.load(`600 208px ${font}`).then(() => document.fonts.ready), look.font);
-      await tab.evaluate(fitWords, WORDS_MAX_H[style] || WORDS_MAX_H.window);
+      await tab.evaluate(fitWords, { maxH: WORDS_MAX_H[style] || WORDS_MAX_H.window, maxLines: WORDS_MAX_LINES });
       await tab.screenshot({ path: path.join(work, "cover.png") });
     } finally {
       await browser.close();

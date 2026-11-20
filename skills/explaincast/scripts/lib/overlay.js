@@ -136,11 +136,16 @@ function installStage({ cursorSvg, hotspot, scale, logo }) {
       const logoShown = withLogo && mark ? [mark] : [];
       card.replaceChildren(...logoShown, inner);
       // A long word or title shrinks to its column instead of running under
-      // the window beside it, and below the logo when there is one.
-      const widest = Math.max(...[...inner.children].map((s) => s.getBoundingClientRect().width));
-      const room = logoShown.length ? 0.6 : 0.8;
-      const fit = Math.min(1, inner.clientWidth / widest, (innerHeight * room) / inner.getBoundingClientRect().height);
-      if (fit < 1) inner.style.fontSize = `${parseFloat(getComputedStyle(inner).fontSize) * fit}px`;
+      // the window beside it, to four lines at most, and below the logo when
+      // there is one.
+      const spans = [...inner.children];
+      const room = innerHeight * (logoShown.length ? 0.6 : 0.8);
+      for (let i = 0; i < 40; i++) {
+        const widest = Math.max(...spans.map((s) => s.getBoundingClientRect().width));
+        const lines = new Set(spans.map((s) => s.offsetTop)).size;
+        if (widest <= inner.clientWidth + 1 && inner.getBoundingClientRect().height <= room && lines <= 4) break;
+        inner.style.fontSize = `${parseFloat(getComputedStyle(inner).fontSize) * 0.95}px`;
+      }
       cur.style.visibility = "hidden";
       const shownAt = covered ? Promise.resolve() : fadeCard(0, 1, "ease-out");
       covered = true;
